@@ -1,0 +1,208 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUBADMIN
+  USER
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      UserRole @default(USER)
+  firstName String?
+  lastName  String?
+  isActive  Boolean  @default(true)
+  
+  // Email verification
+  isEmailVerified    Boolean   @default(false)
+  emailVerificationToken String?
+  emailVerificationExpires DateTime?
+  lastVerificationEmailSent DateTime?
+  
+  // Password reset
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+  lastPasswordResetEmailSent DateTime?
+  
+  // Relations
+  categoryPurchases CategoryPurchase[]
+  videoViews        VideoView[]
+  cart              Cart?
+  
+  // Audit fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  @@map("users")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // CREATE, UPDATE, DELETE, etc.
+  entity    String   // Table name
+  entityId  String   // Record ID
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  location  String?
+  userAgent String?
+  
+  createdAt DateTime @default(now())
+  
+  @@map("audit_logs")
+}
+
+model VideoCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  image       String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  
+  // Pricing (a nivel de curso/categoría) - Dual currency
+  priceARS    Decimal  @db.Decimal(10, 2)
+  priceUSD    Decimal  @db.Decimal(10, 2)
+  isFree      Boolean  @default(false)
+  
+  videos      Video[]
+  purchases   CategoryPurchase[]
+  cartItems   CartItem[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  @@map("video_categories")
+}
+
+model Video {
+  id              String        @id @default(cuid())
+  title           String
+  slug            String        @unique
+  description     String?
+  thumbnail       String?
+  duration        Int?          // Duration in seconds
+  
+  // Vimeo Integration
+  vimeoId         String
+  vimeoUrl        String?
+  
+  // Organization
+  categoryId      String
+  category        VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  order           Int           @default(0)
+  
+  // Status
+  isPublished     Boolean       @default(false)
+  publishedAt     DateTime?
+  
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  
+  // Relations
+  views           VideoView[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  
+  @@map("videos")
+}
+
+model CategoryPurchase {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  
+  // Payment info
+  amount          Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  paymentMethod   String?  // "credit_card", "paypal", etc.
+  transactionId   String?  // External payment provider transaction ID
+  paymentStatus   String   @default("completed") // "pending", "completed", "failed", "refunded"
+  
+  // Access control
+  expiresAt       DateTime? // null = permanent access
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([userId, categoryId])
+  @@map("category_purchases")
+}
+
+model VideoView {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId         String
+  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  // Analytics
+  watchedSeconds  Int      @default(0)
+  totalSeconds    Int?
+  progress        Int      @default(0) // Percentage 0-100
+  completed       Boolean  @default(false)
+  
+  // Session info
+  ipAddress       String?
+  userAgent       String?
+  device          String?  // "desktop", "mobile", "tablet"
+  
+  lastWatchedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([userId, videoId])
+  @@map("video_views")
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  items     CartItem[]
+  
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  
+  @@map("carts")
+}
+
+model CartItem {
+  id         String        @id @default(cuid())
+  cartId     String
+  cart       Cart          @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Snapshot of prices at the time of adding to cart
+  priceARS   Decimal       @db.Decimal(10, 2)
+  priceUSD   Decimal       @db.Decimal(10, 2)
+  
+  addedAt    DateTime      @default(now())
+  
+  @@unique([cartId, categoryId])
+  @@map("cart_items")
+}
