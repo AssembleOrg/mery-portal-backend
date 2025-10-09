@@ -20,7 +20,7 @@ export class EmailService {
     name: string, 
     verificationToken: string,
   ): Promise<void> {
-    const verificationUrl = `${this.configService.get<string>('FRONTEND_URL')}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${this.configService.get<string>('FRONTEND_URL')}/es/verify-email?token=${verificationToken}`;
 
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
@@ -45,7 +45,7 @@ export class EmailService {
     name: string,
     resetToken: string,
   ): Promise<void> {
-    const resetUrl = `${this.configService.get<string>('FRONTEND_URL')}/reset-password?token=${resetToken}`;
+    const resetUrl = `${this.configService.get<string>('FRONTEND_URL')}/es/reset-password?token=${resetToken}`;
 
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
