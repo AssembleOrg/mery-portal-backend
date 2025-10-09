@@ -25,4 +25,21 @@ export class RegisterDto {
   @IsString({ message: 'El apellido debe ser una cadena de texto' })
   @Transform(({ value }) => value?.trim())
   lastName?: string;
+  //reba added:
+  @ApiProperty({ example: '+5491112345678', description: 'Teléfono del usuario', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value?.trim()) 
+  phone?: string;
+
+  @ApiProperty({ example: 'Argentina', description: 'País del usuario', required: false })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiProperty({ example: 'Buenos Aires', description: 'Ciudad del usuario', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value?.trim()) 
+  city?: string;
 }
