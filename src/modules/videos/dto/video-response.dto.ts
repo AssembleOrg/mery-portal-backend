@@ -12,10 +12,6 @@ export class VideoResponseDto {
   @Expose()
   title: string;
 
-  @ApiProperty({ example: 'tecnica-microblading', description: 'Slug del video' })
-  @Expose()
-  slug: string;
-
   @ApiProperty({ example: 'Aprende la técnica completa...', description: 'Descripción del video' })
   @Expose()
   description?: string;

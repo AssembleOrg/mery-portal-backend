@@ -16,16 +16,7 @@ export class VideosService {
   ) {}
 
   async create(createVideoDto: CreateVideoDto, userRole?: string): Promise<VideoResponseDto> {
-    const { slug, vimeoId, categoryId, ...videoData } = createVideoDto;
-
-    // Check if slug already exists
-    const existingSlug = await this.prisma.video.findUnique({
-      where: { slug },
-    });
-
-    if (existingSlug) {
-      throw new ConflictException('El slug ya existe');
-    }
+    const { vimeoId, categoryId, ...videoData } = createVideoDto;
 
     // Check if vimeoId already exists
     // const existingVimeo = await this.prisma.video.findUnique({
@@ -51,18 +42,17 @@ export class VideosService {
       const vimeoInfo = await this.vimeoService.getVideoInfo(vimeoId);
       const thumbnail = await this.vimeoService.getVideoThumbnail(vimeoId);
       
-      // Build clean data object (avoid undefined fields)
-      const videoCreateData: any = {
-        title: videoData.title,
-        slug,
-        vimeoId,
-        vimeoUrl: vimeoInfo.link,
-        thumbnail,
-        duration: vimeoInfo.duration,
-        categoryId,
-        order: videoData.order ?? 0,
-        isPublished: videoData.isPublished ?? false,
-      };
+        // Build clean data object (avoid undefined fields)
+        const videoCreateData: any = {
+          title: videoData.title,
+          vimeoId,
+          vimeoUrl: vimeoInfo.link,
+          thumbnail,
+          duration: vimeoInfo.duration,
+          categoryId,
+          order: videoData.order ?? 0,
+          isPublished: videoData.isPublished ?? false,
+        };
 
       // Only add optional fields if they are defined
       if (videoData.description) {
@@ -81,31 +71,30 @@ export class VideosService {
       // Create video
       const video = await this.prisma.video.create({
         data: videoCreateData,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      this.logger.log(`Video creado exitosamente: ${video.id}`);
-      return this.toVideoResponseDto(video, userRole);
-    } catch (error: any) {
-      this.logger.error('Error al crear video:', error);
-      
-      // If it's already a NestJS exception, just re-throw it
-      if (error.status) {
-        throw error;
-      }
-      
-      // Handle Prisma errors
-      if (error.code === 'P2002') {
-        throw new ConflictException('Ya existe un video con ese slug o vimeoId');
-      }
+        this.logger.log(`Video creado exitosamente: ${video.id}`);
+        return this.toVideoResponseDto(video, userRole);
+      } catch (error: any) {
+        this.logger.error('Error al crear video:', error);
+        
+        // If it's already a NestJS exception, just re-throw it
+        if (error.status) {
+          throw error;
+        }
+        
+        // Handle Prisma errors
+        if (error.code === 'P2002') {
+          throw new ConflictException('Ya existe un video con ese vimeoId');
+        }
       
       // Generic error
       const errorMessage = error.message || 'Error desconocido al crear el video';
@@ -136,11 +125,10 @@ export class VideosService {
         orderBy: { [sortBy]: sortOrder as any },
         include: {
           category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
+              select: {
+                id: true,
+                name: true,
+              },
           },
         },
       }),
@@ -173,22 +161,18 @@ export class VideosService {
   }
 
   async findOne(identifier: string, userId?: string, userRole?: string): Promise<VideoResponseDto> {
-    // Try to find by ID or slug
+    // Find by ID only
     const video = await this.prisma.video.findFirst({
       where: {
-        OR: [
-          { id: identifier },
-          { slug: identifier },
-        ],
+        id: identifier,
         deletedAt: null,
       },
       include: {
         category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
+              select: {
+                id: true,
+                name: true,
+              },
         },
       },
     });
@@ -212,17 +196,6 @@ export class VideosService {
 
     if (!video) {
       throw new NotFoundException('Video no encontrado');
-    }
-
-    // If slug is being updated, check it doesn't exist
-    if (updateVideoDto.slug && updateVideoDto.slug !== video.slug) {
-      const existingSlug = await this.prisma.video.findUnique({
-        where: { slug: updateVideoDto.slug },
-      });
-
-      if (existingSlug) {
-        throw new ConflictException('El slug ya existe');
-      }
     }
 
     // If vimeoId is being updated, get new info
@@ -250,11 +223,10 @@ export class VideosService {
       },
       include: {
         category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
+              select: {
+                id: true,
+                name: true,
+              },
         },
       },
     });
@@ -462,16 +434,7 @@ export class VideosService {
     file: Express.Multer.File,
     uploadVideoDto: UploadVideoDto,
   ): Promise<VideoResponseDto> {
-    const { slug, categoryId, title, description, order, isPublished } = uploadVideoDto;
-
-    // Check if slug already exists
-    const existingSlug = await this.prisma.video.findUnique({
-      where: { slug },
-    });
-
-    if (existingSlug) {
-      throw new ConflictException('El slug ya existe');
-    }
+    const { categoryId, title, description, order, isPublished } = uploadVideoDto;
 
     // Verify category exists
     const category = await this.prisma.videoCategory.findUnique({
@@ -510,7 +473,6 @@ export class VideosService {
       const video = await this.prisma.video.create({
         data: {
           title,
-          slug,
           description,
           vimeoId,
           vimeoUrl: vimeoInfo.link,
@@ -523,11 +485,10 @@ export class VideosService {
         },
         include: {
           category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
+              select: {
+                id: true,
+                name: true,
+              },
           },
         },
       });

@@ -77,7 +77,7 @@ export class VideosController {
 
   @Get(':identifier')
   @Public()
-  @ApiOperation({ summary: 'Obtener video por ID o slug' })
+  @ApiOperation({ summary: 'Obtener video por ID' })
   @ApiResponseDoc({
     status: 200,
     description: 'Video obtenido exitosamente',
@@ -215,7 +215,7 @@ export class VideosController {
     description: 'Video file and metadata',
     schema: {
       type: 'object',
-      required: ['file', 'title', 'slug', 'categoryId'],
+      required: ['file', 'title', 'categoryId'],
       properties: {
         file: {
           type: 'string',
@@ -226,11 +226,6 @@ export class VideosController {
           type: 'string',
           example: 'Técnica Avanzada de Microblading',
           description: 'Título del video',
-        },
-        slug: {
-          type: 'string',
-          example: 'tecnica-avanzada-microblading',
-          description: 'Slug único para el video',
         },
         description: {
           type: 'string',
@@ -266,7 +261,7 @@ export class VideosController {
   })
   @ApiResponseDoc({
     status: 409,
-    description: 'Slug duplicado o error de Vimeo',
+    description: 'Error de Vimeo',
   })
   @UseInterceptors(
     FileInterceptor('file', {

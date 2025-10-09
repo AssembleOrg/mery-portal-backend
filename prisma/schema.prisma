@@ -94,7 +94,6 @@ model VideoCategory {
 model Video {
   id              String        @id @default(cuid())
   title           String
-  slug            String        @unique
   description     String?
   thumbnail       String?
   duration        Int?          // Duration in seconds

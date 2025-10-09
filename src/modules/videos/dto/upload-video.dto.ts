@@ -15,18 +15,6 @@ export class UploadVideoDto {
   title: string;
 
   @ApiProperty({
-    example: 'tecnica-avanzada-microblading',
-    description: 'Slug único para el video',
-    minLength: 3,
-    maxLength: 200,
-  })
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(3)
-  @MaxLength(200)
-  slug: string;
-
-  @ApiProperty({
     example: 'En este video aprenderás las técnicas más avanzadas de microblading...',
     description: 'Descripción del video',
     required: false,

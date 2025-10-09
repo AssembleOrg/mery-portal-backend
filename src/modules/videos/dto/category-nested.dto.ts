@@ -6,8 +6,5 @@ export class CategoryNestedDto {
 
   @Expose()
   name: string;
-
-  @Expose()
-  slug: string;
 }
 

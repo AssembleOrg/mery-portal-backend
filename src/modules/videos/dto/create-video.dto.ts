@@ -9,12 +9,6 @@ export class CreateVideoDto {
   @Transform(({ value }) => value?.trim())
   title: string;
 
-  @ApiProperty({ example: 'tecnica-microblading-paso-a-paso', description: 'Slug único del video' })
-  @IsString({ message: 'El slug debe ser una cadena de texto' })
-  @IsNotEmpty({ message: 'El slug es requerido' })
-  @Transform(({ value }) => value?.trim().toLowerCase())
-  slug: string;
-
   @ApiProperty({ 
     example: 'Aprende la técnica completa de microblading para cejas perfectas', 
     description: 'Descripción del video',
