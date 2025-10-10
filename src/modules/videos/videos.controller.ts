@@ -36,6 +36,7 @@ import type { JwtPayload } from '../../shared/types';
 
 @ApiTags('Videos')
 @Controller('videos')
+@UseGuards(JwtAuthGuard)  // Apply JWT guard globally to all endpoints
 export class VideosController {
   constructor(private readonly videosService: VideosService) {}
 
@@ -98,7 +99,10 @@ export class VideosController {
 
   @Get(':id/stream')
   @Public()
-  @ApiOperation({ summary: 'Obtener URL de streaming segura (Público para videos order=0)' })
+  @ApiOperation({ 
+    summary: 'Obtener URL de streaming segura (Público para videos order=0, ADMIN/SUBADMIN tienen acceso total)',
+    description: 'Los videos con order=0 son públicos. Los demás requieren autenticación y compra. ADMIN y SUBADMIN pueden ver todos los videos sin restricciones.'
+  })
   @ApiResponseDoc({
     status: 200,
     description: 'URL de streaming obtenida exitosamente',
@@ -116,8 +120,12 @@ export class VideosController {
     @Req() request: any,
   ) {
     // Usuario autenticado opcional (solo requerido para videos con order > 0)
+    // Admins y Subadmins tienen acceso completo a todos los videos
     const userId = request.user?.sub;
-    return this.videosService.getStreamingUrl(id, userId);
+    const userRole = request.user?.role;
+    console.log('userId', userId);
+    console.log('userRole', userRole);
+    return this.videosService.getStreamingUrl(id, userId, userRole);
   }
 
   @Post(':id/progress')

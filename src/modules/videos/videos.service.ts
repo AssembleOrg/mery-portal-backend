@@ -256,8 +256,9 @@ export class VideosService {
    * 
    * Videos with order = 0 are public (preview/free videos)
    * Videos with order > 0 require authentication and purchase
+   * ADMIN and SUBADMIN have unrestricted access to all videos
    */
-  async getStreamingUrl(videoId: string, userId?: string): Promise<{ streamUrl: string; expiresIn: number }> {
+  async getStreamingUrl(videoId: string, userId?: string, userRole?: string): Promise<{ streamUrl: string; expiresIn: number }> {
     // Find video
     const video = await this.prisma.video.findUnique({
       where: { id: videoId, deletedAt: null },
@@ -274,14 +275,19 @@ export class VideosService {
       throw new NotFoundException('Video no encontrado');
     }
 
-    if (!video.isPublished) {
+    // Check if user is admin or subadmin (they have unrestricted access)
+    const isAdmin = userRole === 'ADMIN' || userRole === 'SUBADMIN';
+
+    // Admins can view unpublished videos, regular users cannot
+    if (!video.isPublished && !isAdmin) {
       throw new ForbiddenException('Este video no está disponible');
     }
 
     // Videos with order = 0 are public (preview/free videos)
     const isPreviewVideo = video.order === 0;
 
-    if (!isPreviewVideo) {
+    // Admins and Subadmins have unrestricted access
+    if (!isAdmin && !isPreviewVideo) {
       // For non-preview videos, require authentication
       if (!userId) {
         throw new ForbiddenException('Debes iniciar sesión para acceder a este video');
