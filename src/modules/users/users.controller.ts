@@ -18,7 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto } from './dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto } from './dto';
 import { JwtAuthGuard, RolesGuard } from '../../shared/guards';
 import { Roles, Auditory } from '../../shared/decorators';
 import { UserRole } from '../../shared/types';
@@ -127,5 +127,88 @@ export class UsersController {
   })
   async restore(@Param('id') id: string): Promise<UserResponseDto> {
     return this.usersService.restore(id);
+  }
+
+  /**
+   * Get all categories (courses) assigned to a user
+   */
+  @Get(':userId/categories')
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @ApiOperation({ summary: 'Obtener categorías/cursos asignados a un usuario' })
+  @ApiResponseDoc({
+    status: 200,
+    description: 'Lista de categorías del usuario obtenida exitosamente',
+  })
+  @ApiResponseDoc({
+    status: 404,
+    description: 'Usuario no encontrado',
+  })
+  async getUserCategories(@Param('userId') userId: string) {
+    const categories = await this.usersService.getUserCategories(userId);
+    return {
+      success: true,
+      data: categories,
+      count: categories.length,
+    };
+  }
+
+  /**
+   * Manually assign a course to a user
+   */
+  @Post(':userId/categories/:categoryId')
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  @Auditory({ action: 'ASSIGN_COURSE', entity: 'CategoryPurchase' })
+  @ApiOperation({ summary: 'Asignar curso/categoría a un usuario manualmente' })
+  @ApiResponseDoc({
+    status: 201,
+    description: 'Curso asignado exitosamente',
+  })
+  @ApiResponseDoc({
+    status: 400,
+    description: 'El usuario ya tiene acceso a esta categoría',
+  })
+  @ApiResponseDoc({
+    status: 404,
+    description: 'Usuario o categoría no encontrado',
+  })
+  async assignCourse(
+    @Param('userId') userId: string,
+    @Param('categoryId') categoryId: string,
+    @Body() dto: AssignCourseDto,
+  ) {
+    const result = await this.usersService.assignCourse(userId, categoryId, dto);
+    return {
+      success: true,
+      message: 'Curso asignado exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * Remove course access from a user
+   */
+  @Delete(':userId/categories/:categoryId')
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @HttpCode(HttpStatus.OK)
+  @Auditory({ action: 'REMOVE_COURSE', entity: 'CategoryPurchase' })
+  @ApiOperation({ summary: 'Quitar acceso a un curso/categoría de un usuario' })
+  @ApiResponseDoc({
+    status: 200,
+    description: 'Acceso al curso eliminado exitosamente',
+  })
+  @ApiResponseDoc({
+    status: 404,
+    description: 'Usuario no tiene acceso a esta categoría',
+  })
+  async removeCourse(
+    @Param('userId') userId: string,
+    @Param('categoryId') categoryId: string,
+  ) {
+    const result = await this.usersService.removeCourseAccess(userId, categoryId);
+    return {
+      success: true,
+      ...result,
+    };
   }
 }

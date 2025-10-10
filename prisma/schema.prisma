@@ -147,6 +147,7 @@ model CategoryPurchase {
   updatedAt       DateTime @updatedAt
   
   @@unique([userId, categoryId])
+  @@index([transactionId])
   @@map("category_purchases")
 }
 

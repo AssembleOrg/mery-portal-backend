@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { setupSwagger } from './shared/config/swagger.config';
 
@@ -18,6 +19,11 @@ async function bootstrap() {
 
   // API prefix
   app.setGlobalPrefix('api');
+
+  // Raw body parser for webhooks (must be before other body parsers)
+  // Mercado Pago webhooks need raw body for signature validation
+  app.use('/api/webhooks/mercadopago', express.raw({ type: 'application/json' }));
+  app.use('/api/webhook', express.raw({ type: 'application/json' })); // Alias para frontend
 
   // Cookie parser - Required for reading cookies
   app.use(cookieParser());

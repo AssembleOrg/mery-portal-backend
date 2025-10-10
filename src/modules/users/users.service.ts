@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
 import { PasswordUtil } from '../../shared/utils';
 import { PaginatedResponse } from '../../shared/types';
-import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto } from './dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto } from './dto';
 import { plainToClass } from 'class-transformer';
 
 @Injectable()
@@ -189,5 +189,170 @@ export class UsersService {
     });
 
     return plainToClass(UserResponseDto, restoredUser);
+  }
+
+  /**
+   * Get all categories (courses) assigned to a user
+   */
+  async getUserCategories(userId: string) {
+    // Verify user exists
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+    }
+
+    // Get user's category purchases
+    const categoryPurchases = await this.prisma.categoryPurchase.findMany({
+      where: {
+        userId,
+        isActive: true,
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            image: true,
+            priceARS: true,
+            priceUSD: true,
+            isFree: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return categoryPurchases;
+  }
+
+  /**
+   * Manually assign a course to a user (admin only)
+   */
+  async assignCourse(
+    userId: string,
+    categoryId: string,
+    dto: AssignCourseDto,
+  ) {
+    // Verify user exists
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario no encontrado: ${userId}`);
+    }
+
+    // Verify category exists
+    const category = await this.prisma.videoCategory.findFirst({
+      where: { id: categoryId, deletedAt: null },
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Categoría no encontrada: ${categoryId}`);
+    }
+
+    // Check if user already has access
+    const existingAccess = await this.prisma.categoryPurchase.findUnique({
+      where: {
+        userId_categoryId: {
+          userId,
+          categoryId,
+        },
+      },
+    });
+
+    if (existingAccess) {
+      throw new BadRequestException(
+        `El usuario ya tiene acceso a la categoría "${category.name}"`,
+      );
+    }
+
+    // Create category purchase (manual assignment)
+    const categoryPurchase = await this.prisma.categoryPurchase.create({
+      data: {
+        userId,
+        categoryId,
+        amount: dto.amount,
+        currency: dto.currency,
+        paymentMethod: dto.paymentMethod || 'manual_assignment',
+        paymentStatus: 'completed',
+        isActive: true,
+        expiresAt: null, // Permanent access
+        // transactionId is null for manual assignments
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            image: true,
+            priceARS: true,
+            priceUSD: true,
+            isFree: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    return categoryPurchase;
+  }
+
+  /**
+   * Remove course access from a user (admin only)
+   */
+  async removeCourseAccess(userId: string, categoryId: string) {
+    // Verify the access exists
+    const access = await this.prisma.categoryPurchase.findUnique({
+      where: {
+        userId_categoryId: {
+          userId,
+          categoryId,
+        },
+      },
+      include: {
+        category: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!access) {
+      throw new NotFoundException(
+        'El usuario no tiene acceso a esta categoría',
+      );
+    }
+
+    // Delete the access
+    await this.prisma.categoryPurchase.delete({
+      where: {
+        userId_categoryId: {
+          userId,
+          categoryId,
+        },
+      },
+    });
+
+    return {
+      message: `Acceso al curso "${access.category.name}" eliminado exitosamente`,
+    };
   }
 }

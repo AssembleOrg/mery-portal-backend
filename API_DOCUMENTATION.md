@@ -1895,13 +1895,65 @@ Para más información o soporte, consulta la documentación interactiva en Swag
 ---
 
 **Última actualización**: Octubre 2025  
-**Versión**: 1.2 - **Sistema de Carrito, Carga de Videos y Precios Duales**
+**Versión**: 1.3 - **VimeoId Visible para Admins**
 
 ---
 
 ## 📝 Cambios Importantes en esta Versión
 
-### v1.2 - Carga de Videos a Vimeo (Nuevo)
+### v1.3 - VimeoId Visible para Admins (Nuevo) 🔐
+
+#### ✅ Cambios de Seguridad:
+
+1. **Campo `vimeoId` Ahora Visible para ADMIN/SUBADMIN**
+   - **Comportamiento anterior**: El campo `vimeoId` nunca se exponía en las respuestas por seguridad
+   - **Comportamiento nuevo**: El campo `vimeoId` se incluye en las respuestas solo cuando el usuario autenticado tiene rol `ADMIN` o `SUBADMIN`
+   - **Para usuarios regulares (USER)**: El campo NO se incluye (protección contra scraping)
+   - **Para usuarios no autenticados**: El campo NO se incluye
+   - **Aplica a todos los endpoints de videos**: `GET /videos`, `GET /videos/:id`, `POST /videos`, `PATCH /videos/:id`, `POST /videos/upload`
+   - **Razón**: Facilita la administración y debugging sin comprometer la seguridad
+
+2. **Guard de Actividad Sospechosa Mejorado** 🛡️
+   - Ahora excluye imágenes base64 de la validación (elimina falsos positivos)
+   - Mantiene protección contra SQL Injection, XSS, Path Traversal, etc.
+
+#### 📋 Ejemplo de Respuesta por Rol:
+
+**ADMIN/SUBADMIN** (incluye `vimeoId`):
+```json
+{
+  "id": "clx123...",
+  "title": "Técnica de Microblading",
+  "slug": "tecnica-microblading",
+  "vimeoId": "889893557",  ← Solo para ADMIN/SUBADMIN
+  "thumbnail": "https://i.vimeocdn.com/...",
+  "categoryId": "clx456...",
+  "order": 0
+}
+```
+
+**USER o No Autenticado** (sin `vimeoId`):
+```json
+{
+  "id": "clx123...",
+  "title": "Técnica de Microblading",
+  "slug": "tecnica-microblading",
+  "thumbnail": "https://i.vimeocdn.com/...",
+  "categoryId": "clx456...",
+  "order": 0
+}
+```
+
+#### 🔒 ¿Por Qué Este Cambio?
+
+- **Facilita administración**: Los admins pueden ver directamente el ID de Vimeo sin necesidad de consultar la base de datos
+- **Mantiene seguridad**: Los usuarios regulares siguen sin poder acceder al `vimeoId` (previene scraping de videos)
+- **Mejor experiencia de debugging**: Facilita la resolución de problemas con videos
+- **Acceso controlado**: El `vimeoUrl` sigue NUNCA exponiéndose (ni para admins)
+
+---
+
+### v1.2 - Carga de Videos a Vimeo
 
 #### ✅ Nuevas Funcionalidades:
 

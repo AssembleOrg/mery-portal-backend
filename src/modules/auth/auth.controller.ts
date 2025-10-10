@@ -101,20 +101,33 @@ export class AuthController {
   @Post('logout')
   @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Cerrar sesión' })
+  @ApiOperation({ summary: 'Cerrar sesión y limpiar cookies httpOnly' })
   @ApiResponseDoc({
     status: 200,
-    description: 'Sesión cerrada exitosamente',
+    description: 'Sesión cerrada exitosamente. Todas las cookies de autenticación han sido eliminadas.',
   })
-  async logout(@Res({ passthrough: true }) res: express.Response): Promise<{ message: string }> {
-    // Clear the auth cookie
-    res.clearCookie('auth_token', {
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
+  async logout(@Res({ passthrough: true }) res: express.Response): Promise<{ message: string; success: boolean }> {
+    // Array of possible cookie names to clear
+    const cookieNames = ['auth_token', 'access_token', 'token', 'jwt', 'session'];
+    
+    // Cookie options for clearing
+    const cookieOptions = [
+      { httpOnly: true, sameSite: 'lax' as const, path: '/' },
+      { httpOnly: true, sameSite: 'strict' as const, path: '/' },
+      { httpOnly: true, sameSite: 'none' as const, path: '/', secure: true },
+    ];
+
+    // Clear all possible cookie combinations
+    cookieNames.forEach(cookieName => {
+      cookieOptions.forEach(options => {
+        res.clearCookie(cookieName, options);
+      });
     });
 
-    return { message: 'Sesión cerrada exitosamente' };
+    return { 
+      success: true,
+      message: 'Sesión cerrada exitosamente. Cookies eliminadas.' 
+    };
   }
 
   @Post('forgot-password')
