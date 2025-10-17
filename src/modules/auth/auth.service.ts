@@ -295,13 +295,44 @@ export class AuthService {
     return crypto.randomBytes(32).toString('hex');
   }
 
-  async getCurrentUser(jwtPayload: JwtPayload): Promise<{ id: string; email: string; role: UserRole }> {
-    // Retornar directamente la información del JWT
-    // No se hace query a la base de datos para mayor performance
+  async getCurrentUser(jwtPayload: JwtPayload): Promise<MeResponseDto> {
+    // Obtener información completa del usuario desde la base de datos
+    const user = await this.prisma.user.findUnique({
+      where: { 
+        id: jwtPayload.sub,
+        deletedAt: null, // Solo usuarios no eliminados
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true,
+        isEmailVerified: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
     return {
-      id: jwtPayload.sub,
-      email: jwtPayload.email,
-      role: jwtPayload.role,
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName || undefined,
+      lastName: user.lastName || undefined,
+      name: user.firstName && user.lastName 
+        ? `${user.firstName} ${user.lastName}`
+        : user.firstName || user.email,
+      phone: undefined, // Campo no disponible en el modelo actual
+      country: undefined, // Campo no disponible en el modelo actual
+      city: undefined, // Campo no disponible en el modelo actual
+      role: user.role as UserRole,
+      isActive: user.isActive,
+      emailVerified: user.isEmailVerified,
+      createdAt: user.createdAt.toISOString(),
     };
   }
 
