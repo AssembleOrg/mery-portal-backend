@@ -260,6 +260,10 @@ export class MercadoPagoService {
             // Calculate individual price (split total amount proportionally)
             const individualAmount = payment.transaction_amount / categories.length;
 
+            // Calculate expiration date (365 days from now)
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 365);
+
             // Create purchase record
             const purchase = await tx.categoryPurchase.create({
               data: {
@@ -271,7 +275,7 @@ export class MercadoPagoService {
                 transactionId,
                 paymentStatus: 'completed',
                 isActive: true,
-                expiresAt: null, // Permanent access
+                expiresAt, // Expires in 365 days
               },
             });
 

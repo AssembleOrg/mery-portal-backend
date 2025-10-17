@@ -67,26 +67,28 @@ model AuditLog {
 }
 
 model VideoCategory {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  description String?
-  image       String?
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String?
+  longdescription String?  @db.Text
+  image           String?
+  target          String?
+  order           Int      @default(0)
+  isActive        Boolean  @default(true)
   
   // Pricing (a nivel de curso/categoría) - Dual currency
-  priceARS    Decimal  @db.Decimal(10, 2)
-  priceUSD    Decimal  @db.Decimal(10, 2)
-  isFree      Boolean  @default(false)
+  priceARS        Decimal  @db.Decimal(10, 2)
+  priceUSD        Decimal  @db.Decimal(10, 2)
+  isFree          Boolean  @default(false)
   
-  videos      Video[]
-  purchases   CategoryPurchase[]
-  cartItems   CartItem[]
+  videos          Video[]
+  purchases       CategoryPurchase[]
+  cartItems       CartItem[]
   
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
   
   @@map("video_categories")
 }

@@ -39,6 +39,14 @@ export class CategoriesController {
     return this.categoriesService.create(createCategoryDto);
   }
 
+  @Get('all')
+  @Public()
+  @ApiOperation({ summary: 'Listar TODAS las categorías activas sin paginación (para admins)' })
+  @ApiResponse({ status: 200, description: 'Lista completa de categorías activas', type: [CategoryResponseDto] })
+  async findAllNoPagination(): Promise<CategoryResponseDto[]> {
+    return this.categoriesService.findAllActive();
+  }
+
   @Get()
   @Public()
   @ApiOperation({ summary: 'Listar todas las categorías/cursos (Público)' })

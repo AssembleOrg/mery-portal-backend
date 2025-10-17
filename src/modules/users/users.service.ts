@@ -274,6 +274,10 @@ export class UsersService {
       );
     }
 
+    // Calculate expiration date (365 days from now)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 365);
+
     // Create category purchase (manual assignment)
     const categoryPurchase = await this.prisma.categoryPurchase.create({
       data: {
@@ -284,7 +288,7 @@ export class UsersService {
         paymentMethod: dto.paymentMethod || 'manual_assignment',
         paymentStatus: 'completed',
         isActive: true,
-        expiresAt: null, // Permanent access
+        expiresAt, // Expires in 365 days
         // transactionId is null for manual assignments
       },
       include: {

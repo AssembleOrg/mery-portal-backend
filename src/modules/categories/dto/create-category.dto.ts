@@ -15,12 +15,21 @@ export class CreateCategoryDto {
 
   @ApiProperty({ 
     example: 'Técnicas y tutoriales de microblading y diseño de cejas', 
-    description: 'Descripción de la categoría',
+    description: 'Descripción corta de la categoría',
     required: false 
   })
   @IsOptional()
   @IsString({ message: 'La descripción debe ser una cadena de texto' })
   description?: string;
+
+  @ApiProperty({ 
+    example: 'En este curso aprenderás todas las técnicas profesionales de microblading, diseño de cejas y mucho más. Incluye prácticas, casos reales y certificación.', 
+    description: 'Descripción larga y detallada de la categoría',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'La descripción larga debe ser una cadena de texto' })
+  longdescription?: string;
 
   @ApiProperty({ 
     example: 'https://example.com/images/cejas.jpg', 
@@ -30,6 +39,15 @@ export class CreateCategoryDto {
   @IsOptional()
   @IsString({ message: 'La imagen debe ser una cadena de texto' })
   image?: string;
+
+  @ApiProperty({ 
+    example: 'Profesionales de belleza y principiantes', 
+    description: 'Público objetivo o target del curso',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'El target debe ser una cadena de texto' })
+  target?: string;
 
   @ApiProperty({ example: 0, description: 'Orden de la categoría en la lista', required: false })
   @IsOptional()

@@ -18,10 +18,18 @@ export class CategoryResponseDto {
   @Expose()
   @ApiProperty({ 
     example: 'Técnicas y tutoriales de microblading y diseño de cejas', 
-    description: 'Descripción de la categoría',
+    description: 'Descripción corta de la categoría',
     required: false 
   })
   description?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'En este curso aprenderás todas las técnicas profesionales de microblading, diseño de cejas y mucho más. Incluye prácticas, casos reales y certificación.', 
+    description: 'Descripción larga y detallada de la categoría',
+    required: false 
+  })
+  longdescription?: string;
 
   @Expose()
   @ApiProperty({ 
@@ -30,6 +38,14 @@ export class CategoryResponseDto {
     required: false 
   })
   image?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'Profesionales de belleza y principiantes', 
+    description: 'Público objetivo o target del curso',
+    required: false 
+  })
+  target?: string;
 
   @Expose()
   @ApiProperty({ example: 0, description: 'Orden de la categoría en la lista' })

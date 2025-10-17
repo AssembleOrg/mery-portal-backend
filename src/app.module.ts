@@ -13,6 +13,7 @@ import { VideosModule } from './modules/videos';
 import { CategoriesModule } from './modules/categories';
 import { CartModule } from './modules/cart';
 import { MercadoPagoModule } from './modules/mercadopago';
+import { CronModule } from './modules/cron';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
 import { ResponseInterceptor, LoggingInterceptor } from './shared/interceptors';
@@ -51,6 +52,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     CategoriesModule,
     CartModule,
     MercadoPagoModule,
+    CronModule,
   ],
   controllers: [AppController],
   providers: [

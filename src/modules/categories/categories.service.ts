@@ -38,6 +38,45 @@ export class CategoriesService {
     return plainToClass(CategoryResponseDto, categoryWithNumberPrices, { excludeExtraneousValues: true });
   }
 
+  /**
+   * Get all active categories without pagination (for admin purposes)
+   */
+  async findAllActive(): Promise<CategoryResponseDto[]> {
+    const categories = await this.prisma.videoCategory.findMany({
+      where: {
+        deletedAt: null,
+        isActive: true,
+      },
+      orderBy: {
+        order: 'asc', // Ordenar por el campo order
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        longdescription: true,
+        image: true,
+        target: true,
+        priceARS: true,
+        priceUSD: true,
+        isFree: true,
+        isActive: true,
+        order: true,
+      },
+    });
+
+    // Convert Decimal to number and map to DTOs
+    return categories.map(category => {
+      const categoryWithNumberPrices = {
+        ...category,
+        priceARS: Number(category.priceARS),
+        priceUSD: Number(category.priceUSD),
+      };
+      return plainToClass(CategoryResponseDto, categoryWithNumberPrices, { excludeExtraneousValues: true });
+    });
+  }
+
   async findAll(query: CategoryQueryDto, userId?: string): Promise<PaginatedResponse<CategoryResponseDto>> {
     const { page = 1, limit = 10, search, sortBy = 'order', sortOrder = 'asc', isActive } = query;
     const skip = (page - 1) * limit;
