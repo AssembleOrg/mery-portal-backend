@@ -24,12 +24,21 @@ export class CreateCategoryDto {
 
   @ApiProperty({ 
     example: 'En este curso aprenderás todas las técnicas profesionales de microblading, diseño de cejas y mucho más. Incluye prácticas, casos reales y certificación.', 
-    description: 'Descripción larga y detallada de la categoría',
+    description: 'Descripción larga y detallada de la categoría (español)',
     required: false 
   })
   @IsOptional()
   @IsString({ message: 'La descripción larga debe ser una cadena de texto' })
-  longdescription?: string;
+  long_description?: string;
+
+  @ApiProperty({ 
+    example: 'In this course you will learn all professional microblading and eyebrow design techniques...', 
+    description: 'Descripción larga y detallada de la categoría (inglés)',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'La descripción larga en inglés debe ser una cadena de texto' })
+  long_description_en?: string;
 
   @ApiProperty({ 
     example: 'https://example.com/images/cejas.jpg', 
@@ -42,12 +51,73 @@ export class CreateCategoryDto {
 
   @ApiProperty({ 
     example: 'Profesionales de belleza y principiantes', 
-    description: 'Público objetivo o target del curso',
+    description: 'Público objetivo o target del curso (español)',
     required: false 
   })
   @IsOptional()
   @IsString({ message: 'El target debe ser una cadena de texto' })
   target?: string;
+
+  @ApiProperty({ 
+    example: 'Beauty professionals and beginners', 
+    description: 'Público objetivo o target del curso (inglés)',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'El target en inglés debe ser una cadena de texto' })
+  target_en?: string;
+
+  @ApiProperty({ 
+    example: 'Online', 
+    description: 'Modalidad del curso (español): Online, Presencial, Híbrido',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'La modalidad debe ser una cadena de texto' })
+  modalidad?: string;
+
+  @ApiProperty({ 
+    example: 'Online', 
+    description: 'Modalidad del curso (inglés): Online, In-person, Hybrid',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'La modalidad en inglés debe ser una cadena de texto' })
+  modalidad_en?: string;
+
+  @ApiProperty({ 
+    example: 'Técnicas de microblading\nDiseño de cejas perfecto\nColorimetría avanzada', 
+    description: 'Qué aprenderán los estudiantes (español)',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'El campo learn debe ser una cadena de texto' })
+  learn?: string;
+
+  @ApiProperty({ 
+    example: 'Microblading techniques\nPerfect eyebrow design\nAdvanced color theory', 
+    description: 'Qué aprenderán los estudiantes (inglés)',
+    required: false 
+  })
+  @IsOptional()
+  @IsString({ message: 'El campo learn en inglés debe ser una cadena de texto' })
+  learn_en?: string;
+
+  @ApiProperty({ 
+    example: { items: ['Videos HD', 'Certificado', 'Material descargable', 'Acceso de por vida'] }, 
+    description: 'Qué incluye el curso (español) - Estructura JSON',
+    required: false 
+  })
+  @IsOptional()
+  includes_category?: any;
+
+  @ApiProperty({ 
+    example: { items: ['HD Videos', 'Certificate', 'Downloadable materials', 'Lifetime access'] }, 
+    description: 'Qué incluye el curso (inglés) - Estructura JSON',
+    required: false 
+  })
+  @IsOptional()
+  includes_category_en?: any;
 
   @ApiProperty({ example: 0, description: 'Orden de la categoría en la lista', required: false })
   @IsOptional()

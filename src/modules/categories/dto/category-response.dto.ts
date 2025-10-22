@@ -26,10 +26,18 @@ export class CategoryResponseDto {
   @Expose()
   @ApiProperty({ 
     example: 'En este curso aprenderás todas las técnicas profesionales de microblading, diseño de cejas y mucho más. Incluye prácticas, casos reales y certificación.', 
-    description: 'Descripción larga y detallada de la categoría',
+    description: 'Descripción larga y detallada de la categoría (español)',
     required: false 
   })
-  longdescription?: string;
+  long_description?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'In this course you will learn all professional microblading and eyebrow design techniques...', 
+    description: 'Descripción larga y detallada de la categoría (inglés)',
+    required: false 
+  })
+  long_description_en?: string;
 
   @Expose()
   @ApiProperty({ 
@@ -42,10 +50,66 @@ export class CategoryResponseDto {
   @Expose()
   @ApiProperty({ 
     example: 'Profesionales de belleza y principiantes', 
-    description: 'Público objetivo o target del curso',
+    description: 'Público objetivo o target del curso (español)',
     required: false 
   })
   target?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'Beauty professionals and beginners', 
+    description: 'Público objetivo o target del curso (inglés)',
+    required: false 
+  })
+  target_en?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'Online', 
+    description: 'Modalidad del curso (español)',
+    required: false 
+  })
+  modalidad?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'Online', 
+    description: 'Modalidad del curso (inglés)',
+    required: false 
+  })
+  modalidad_en?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'Técnicas de microblading\nDiseño de cejas perfecto\nColorimetría avanzada', 
+    description: 'Qué aprenderán los estudiantes (español)',
+    required: false 
+  })
+  learn?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: 'Microblading techniques\nPerfect eyebrow design\nAdvanced color theory', 
+    description: 'Qué aprenderán los estudiantes (inglés)',
+    required: false 
+  })
+  learn_en?: string;
+
+  @Expose()
+  @ApiProperty({ 
+    example: { items: ['Videos HD', 'Certificado', 'Material descargable', 'Acceso de por vida'] }, 
+    description: 'Qué incluye el curso (español) - Estructura JSON',
+    required: false 
+  })
+  includes_category?: any;
+
+  @Expose()
+  @ApiProperty({ 
+    example: { items: ['HD Videos', 'Certificate', 'Downloadable materials', 'Lifetime access'] }, 
+    description: 'Qué incluye el curso (inglés) - Estructura JSON',
+    required: false 
+  })
+  includes_category_en?: any;
 
   @Expose()
   @ApiProperty({ example: 0, description: 'Orden de la categoría en la lista' })

@@ -67,28 +67,44 @@ model AuditLog {
 }
 
 model VideoCategory {
-  id              String   @id @default(cuid())
-  name            String
-  slug            String   @unique
-  description     String?
-  longdescription String?  @db.Text
-  image           String?
-  target          String?
-  order           Int      @default(0)
-  isActive        Boolean  @default(true)
+  id               String   @id @default(cuid())
+  name             String
+  slug             String   @unique
+  description      String?
+  long_description String?  @db.Text
+  image            String?
+  target           String?
+  order            Int      @default(0)
+  isActive         Boolean  @default(true)
   
+  // Multilanguage fields (English versions)
+  long_description_en String?  @db.Text
+  target_en           String?
+  
+  // Course modality
+  modalidad    String?
+  modalidad_en String?
+  
+  // What students will learn
+  learn    String?  @db.Text
+  learn_en String?  @db.Text
+  
+  // What the course includes (structured data)
+  includes_category    Json?
+  includes_category_en Json?
+    
   // Pricing (a nivel de curso/categoría) - Dual currency
-  priceARS        Decimal  @db.Decimal(10, 2)
-  priceUSD        Decimal  @db.Decimal(10, 2)
-  isFree          Boolean  @default(false)
+  priceARS         Decimal  @db.Decimal(10, 2)
+  priceUSD         Decimal  @db.Decimal(10, 2)
+  isFree           Boolean  @default(false)
   
-  videos          Video[]
-  purchases       CategoryPurchase[]
-  cartItems       CartItem[]
+  videos           Video[]
+  purchases        CategoryPurchase[]
+  cartItems        CartItem[]
   
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  deletedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
   
   @@map("video_categories")
 }
@@ -112,6 +128,10 @@ model Video {
   // Status
   isPublished     Boolean       @default(false)
   publishedAt     DateTime?
+  
+  // Content
+  contenidos      String?       @db.Text  // Video content/syllabus
+  downloads       Json?                   // Downloadable resources
   
   // SEO
   metaTitle       String?

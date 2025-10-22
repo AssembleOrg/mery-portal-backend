@@ -45,6 +45,27 @@ export class VideoResponseDto {
   @Expose()
   publishedAt?: Date;
 
+  @ApiProperty({ 
+    example: '1. Introducción al microblading\n2. Materiales necesarios\n3. Técnica paso a paso\n4. Cuidados post-procedimiento', 
+    description: 'Contenidos del video (temario/syllabus)',
+    required: false 
+  })
+  @Expose()
+  contenidos?: string;
+
+  @ApiProperty({ 
+    example: { 
+      files: [
+        { name: 'Guía de Microblading.pdf', url: 'https://example.com/guia.pdf' },
+        { name: 'Plantillas descargables.zip', url: 'https://example.com/plantillas.zip' }
+      ]
+    }, 
+    description: 'Recursos descargables (estructura JSON)',
+    required: false 
+  })
+  @Expose()
+  downloads?: any;
+
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z', description: 'Fecha de creación' })
   @Expose()
   createdAt: Date;
