@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../../shared/services';
 import { PasswordUtil } from '../../shared/utils';
 import { PaginatedResponse } from '../../shared/types';
-import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto } from './dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, MigrateUserDto } from './dto';
 import { plainToClass } from 'class-transformer';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     const { email, password, ...userData } = createUserDto;
@@ -357,6 +361,60 @@ export class UsersService {
 
     return {
       message: `Acceso al curso "${access.category.name}" eliminado exitosamente`,
+    };
+  }
+
+  /**
+   * Migrate user from old system - creates user with temporary password
+   * and sends individual email (no email verification needed)
+   */
+  async migrateUser(migrateUserDto: MigrateUserDto): Promise<{ message: string; temporaryPassword: string }> {
+    const { email, firstName, lastName } = migrateUserDto;
+
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException(`El usuario con email ${email} ya existe en el sistema`);
+    }
+
+    // Generate temporary password with format: mg{timestamp}
+    const timestamp = Date.now();
+    const temporaryPassword = `mg${timestamp}`;
+
+    // Hash the temporary password
+    const hashedPassword = await PasswordUtil.hash(temporaryPassword);
+
+    // Create user with email already verified (skip verification)
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        role: 'USER',
+        isActive: true,
+        isEmailVerified: true, // Skip email verification for migrated users
+      },
+    });
+
+    // Send individual email with temporary password
+    try {
+      await this.emailService.sendTemporaryPasswordEmail(
+        email,
+        `${firstName || ''} ${lastName || ''}`.trim() || 'Usuario',
+        temporaryPassword,
+      );
+    } catch (error) {
+      // Log error but don't fail the migration
+      console.error(`Failed to send email to ${email}:`, error);
+    }
+
+    return {
+      message: `Usuario ${email} migrado exitosamente. Email enviado con contraseña temporal.`,
+      temporaryPassword, // Return for admin reference (optional)
     };
   }
 }

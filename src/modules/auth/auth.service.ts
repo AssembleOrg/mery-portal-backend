@@ -286,6 +286,17 @@ export class AuthService {
       },
     });
 
+    // Send notification email about password change
+    try {
+      await this.emailService.sendPasswordChangedNotification(
+        user.email,
+        `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Usuario',
+      );
+    } catch (error) {
+      // Log error but don't fail the password reset
+      console.error('Failed to send password changed notification:', error);
+    }
+
     return {
       message: 'Contraseña restablecida exitosamente. Ya puedes iniciar sesión.',
     };

@@ -18,7 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto } from './dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, MigrateUserDto } from './dto';
 import { JwtAuthGuard, RolesGuard } from '../../shared/guards';
 import { Roles, Auditory } from '../../shared/decorators';
 import { UserRole } from '../../shared/types';
@@ -209,6 +209,30 @@ export class UsersController {
     return {
       success: true,
       ...result,
+    };
+  }
+
+  @Post('migrate')
+  @Roles(UserRole.ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  @Auditory({ action: 'MIGRATE', entity: 'User' })
+  @ApiOperation({ 
+    summary: 'Migrar usuario de sistema anterior',
+    description: 'Crea un usuario con contraseña temporal (formato: mg{timestamp}) y envía email individual. La cuenta queda verificada automáticamente.'
+  })
+  @ApiResponseDoc({
+    status: 201,
+    description: 'Usuario migrado exitosamente y email enviado',
+  })
+  @ApiResponseDoc({
+    status: 409,
+    description: 'El usuario ya existe en el sistema',
+  })
+  async migrateUser(@Body() migrateUserDto: MigrateUserDto) {
+    const result = await this.usersService.migrateUser(migrateUserDto);
+    return {
+      success: true,
+      data: result,
     };
   }
 }
