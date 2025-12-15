@@ -28,3 +28,4 @@ export class PresencialVoteResponseDto {
   voted_at: string;
 }
 
+

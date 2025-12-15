@@ -2,7 +2,8 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException,
 import { PrismaService } from '~/shared/services';
 import { DateTimeUtil } from '~/shared/utils';
 import { DateTime } from 'luxon';
-import { CreatePresencialPollDto, UpdatePresencialPollDto, VotePresencialPollDto, PresencialPollResponseDto, PresencialVoteResponseDto, PresencialPollQueryDto } from './dto';
+import { CreatePresencialPollDto, UpdatePresencialPollDto, VotePresencialPollDto, PresencialPollResponseDto, PresencialVoteResponseDto } from './dto';
+import { PresencialPollQueryDto } from './dto/presencial-poll-query.dto';
 import { PaginatedResponse } from '~/shared/types';
 import { plainToClass } from 'class-transformer';
 

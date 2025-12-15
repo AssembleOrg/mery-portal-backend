@@ -106,3 +106,4 @@ export class PresencialPollResponseDto {
   eligibility: EligibilityResponseDto;
 }
 
+

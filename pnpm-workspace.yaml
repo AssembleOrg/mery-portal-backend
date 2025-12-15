@@ -1,3 +1,6 @@
+packages:
+  - '.'
+
 onlyBuiltDependencies:
   - '@nestjs/core'
   - '@prisma/client'
@@ -5,6 +8,3 @@ onlyBuiltDependencies:
   - '@scarf/scarf'
   - prisma
   - unrs-resolver
-
-directories:
-  - '.'

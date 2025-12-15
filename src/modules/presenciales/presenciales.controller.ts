@@ -24,11 +24,11 @@ import {
   VotePresencialPollDto,
   PresencialPollResponseDto,
   PresencialVoteResponseDto,
-  PresencialPollQueryDto,
 } from './dto';
 import { JwtAuthGuard, RolesGuard } from '~/shared/guards';
 import { Roles } from '~/shared/decorators';
 import { UserRole, PaginatedResponse } from '~/shared/types';
+import { PresencialPollQueryDto } from './dto/presencial-poll-query.dto';
 
 @ApiTags('presenciales')
 @Controller('presenciales')

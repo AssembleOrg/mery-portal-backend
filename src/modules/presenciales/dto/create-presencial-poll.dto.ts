@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional, IsArray, IsDateString, IsObject, ValidateNested, ArrayMinSize, MinLength, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
-class PollOptionDto {
+export class PollOptionDto {
   @ApiProperty({ example: '2024-12-15', description: 'Fecha en formato YYYY-MM-DD' })
   @IsString()
   @IsNotEmpty()
@@ -18,7 +18,7 @@ class PollOptionDto {
   duration_minutes?: number;
 }
 
-class UserOverrideDto {
+export class UserOverrideDto {
   @ApiProperty({ example: 'clx123...', description: 'ID del usuario', required: false })
   @IsOptional()
   @IsString()
@@ -34,7 +34,7 @@ class UserOverrideDto {
   allowed: boolean;
 }
 
-class EligibilityDto {
+export class EligibilityDto {
   @ApiProperty({ example: ['clx123...', 'clx456...'], description: 'IDs de cursos que dan acceso', type: [String] })
   @IsArray()
   @IsString({ each: true })
@@ -100,4 +100,5 @@ export class CreatePresencialPollDto {
   @Type(() => EligibilityDto)
   eligibility: EligibilityDto;
 }
+
 

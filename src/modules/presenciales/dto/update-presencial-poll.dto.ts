@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsArray, IsDateString, IsObject, ValidateNested, IsEnum, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CreatePresencialPollDto, PollOptionDto, EligibilityDto } from './create-presencial-poll.dto';
+import { PollOptionDto } from './create-presencial-poll.dto';
+import { EligibilityDto } from './create-presencial-poll.dto';
 
 export enum PresencialPollStatus {
   draft = 'draft',
@@ -70,4 +71,5 @@ export class UpdatePresencialPollDto {
   @Type(() => EligibilityDto)
   eligibility?: EligibilityDto;
 }
+
 

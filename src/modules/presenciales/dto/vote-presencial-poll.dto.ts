@@ -8,3 +8,4 @@ export class VotePresencialPollDto {
   option_id: string;
 }
 
+
