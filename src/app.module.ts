@@ -14,6 +14,7 @@ import { CategoriesModule } from './modules/categories';
 import { CartModule } from './modules/cart';
 import { MercadoPagoModule } from './modules/mercadopago';
 import { CronModule } from './modules/cron';
+import { PresencialesModule } from './modules/presenciales';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
 import { ResponseInterceptor, LoggingInterceptor } from './shared/interceptors';
@@ -53,6 +54,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     CartModule,
     MercadoPagoModule,
     CronModule,
+    PresencialesModule,
   ],
   controllers: [AppController],
   providers: [
