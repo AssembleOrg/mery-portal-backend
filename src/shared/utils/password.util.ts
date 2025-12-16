@@ -12,8 +12,8 @@ export class PasswordUtil {
   }
 
   static validate(password: string): boolean {
-    // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{8,}$/;
-    return regex.test(password);
+    // At least 8 characters (after trim, no whitespace)
+    const trimmedPassword = password.trim();
+    return trimmedPassword.length >= 8 && !/\s/.test(trimmedPassword);
   }
 }

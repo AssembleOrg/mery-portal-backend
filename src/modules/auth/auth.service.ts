@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../shared/services';
 import { PasswordUtil, DateTimeUtil } from '../../shared/utils';
 import { JwtPayload, UserRole } from '../../shared/types';
-import { LoginDto, RegisterDto, AuthResponseDto, VerifyEmailDto, ResendVerificationDto, ForgotPasswordDto, ResetPasswordDto, MeResponseDto } from './dto';
+import { LoginDto, RegisterDto, AuthResponseDto, VerifyEmailDto, ResendVerificationDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto, MeResponseDto } from './dto';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
@@ -18,7 +18,7 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto): Promise<{ message: string }> {
-    const { email, password, firstName, lastName } = registerDto;
+    const { email, password, firstName, lastName, phone, country, city } = registerDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -32,7 +32,7 @@ export class AuthService {
     // Validate password strength
     if (!PasswordUtil.validate(password)) {
       throw new ConflictException(
-        'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número',
+        'La contraseña debe tener al menos 8 caracteres (sin espacios en blanco)',
       );
     }
 
@@ -50,6 +50,9 @@ export class AuthService {
         password: hashedPassword,
         firstName,
         lastName,
+        phone,
+        country,
+        city,
         role: UserRole.USER, // Only USER role can be created through registration
         emailVerificationToken: verificationToken,
         emailVerificationExpires: verificationExpires,
@@ -270,7 +273,7 @@ export class AuthService {
     // Validate password strength
     if (!PasswordUtil.validate(newPassword)) {
       throw new BadRequestException(
-        'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número',
+        'La contraseña debe tener al menos 8 caracteres (sin espacios en blanco)',
       );
     }
 
@@ -302,6 +305,53 @@ export class AuthService {
     };
   }
 
+  async changePassword(userId: string, changePasswordDto: ChangePasswordDto): Promise<{ message: string }> {
+    const { currentPassword, newPassword } = changePasswordDto;
+
+    // Get user
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await PasswordUtil.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('La contraseña actual es incorrecta');
+    }
+
+    // Validate new password strength
+    if (!PasswordUtil.validate(newPassword)) {
+      throw new BadRequestException(
+        'La contraseña debe tener al menos 8 caracteres (sin espacios en blanco)',
+      );
+    }
+
+    // Check if new password is different from current
+    const isSamePassword = await PasswordUtil.compare(newPassword, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException('La nueva contraseña debe ser diferente a la actual');
+    }
+
+    // Hash new password
+    const hashedPassword = await PasswordUtil.hash(newPassword);
+
+    // Update password
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+      },
+    });
+
+    return {
+      message: 'Contraseña cambiada exitosamente',
+    };
+  }
+
   private generateToken(): string {
     return crypto.randomBytes(32).toString('hex');
   }
@@ -318,6 +368,9 @@ export class AuthService {
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
+        country: true,
+        city: true,
         role: true,
         isActive: true,
         isEmailVerified: true,
@@ -337,9 +390,9 @@ export class AuthService {
       name: user.firstName && user.lastName 
         ? `${user.firstName} ${user.lastName}`
         : user.firstName || user.email,
-      phone: undefined, // Campo no disponible en el modelo actual
-      country: undefined, // Campo no disponible en el modelo actual
-      city: undefined, // Campo no disponible en el modelo actual
+      phone: user.phone || undefined,
+      country: user.country || undefined,
+      city: user.city || undefined,
       role: user.role as UserRole,
       isActive: user.isActive,
       emailVerified: user.isEmailVerified,

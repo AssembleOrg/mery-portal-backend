@@ -23,6 +23,9 @@ model User {
   role      UserRole @default(USER)
   firstName String?
   lastName  String?
+  phone     String?
+  country   String?
+  city      String?
   isActive  Boolean  @default(true)
   
   // Email verification

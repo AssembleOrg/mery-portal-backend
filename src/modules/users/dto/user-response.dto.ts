@@ -17,6 +17,15 @@ export class UserResponseDto {
   @ApiProperty({ example: 'Pérez', description: 'Apellido del usuario', required: false })
   lastName?: string;
 
+  @ApiProperty({ example: '+5491112345678', description: 'Teléfono del usuario', required: false })
+  phone?: string;
+
+  @ApiProperty({ example: 'Argentina', description: 'País del usuario', required: false })
+  country?: string;
+
+  @ApiProperty({ example: 'Buenos Aires', description: 'Ciudad del usuario', required: false })
+  city?: string;
+
   @ApiProperty({ example: true, description: 'Estado activo del usuario' })
   isActive: boolean;
 

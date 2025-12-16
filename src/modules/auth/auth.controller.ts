@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse as ApiResponseDoc, ApiBearerAuth } f
 import { Throttle } from '@nestjs/throttler';
 import * as express from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, AuthResponseDto, VerifyEmailDto, ResendVerificationDto, ForgotPasswordDto, ResetPasswordDto, MeResponseDto } from './dto';
+import { LoginDto, RegisterDto, AuthResponseDto, VerifyEmailDto, ResendVerificationDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto, MeResponseDto } from './dto';
 import { Public, CurrentUser } from '../../shared/decorators';
 import { AuthThrottlerGuard, JwtAuthGuard } from '../../shared/guards';
 
@@ -160,6 +160,34 @@ export class AuthController {
   })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto): Promise<{ message: string }> {
     return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cambiar contraseña del usuario autenticado' })
+  @ApiResponseDoc({
+    status: 200,
+    description: 'Contraseña cambiada exitosamente',
+  })
+  @ApiResponseDoc({
+    status: 400,
+    description: 'La nueva contraseña no cumple con los requisitos o es igual a la actual',
+  })
+  @ApiResponseDoc({
+    status: 401,
+    description: 'La contraseña actual es incorrecta o token inválido',
+  })
+  @ApiResponseDoc({
+    status: 404,
+    description: 'Usuario no encontrado',
+  })
+  async changePassword(
+    @CurrentUser() user: any,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    return this.authService.changePassword(user.sub, changePasswordDto);
   }
 
   @Get('me')
