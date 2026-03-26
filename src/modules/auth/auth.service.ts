@@ -204,11 +204,8 @@ export class AuthService {
       where: { email, deletedAt: null },
     });
 
-    // Don't reveal if user exists or not
     if (!user) {
-      return {
-        message: 'Si el correo existe, recibirás instrucciones para restablecer tu contraseña',
-      };
+      throw new NotFoundException('No existe una cuenta asociada a este correo electrónico');
     }
 
     if (!user.isEmailVerified) {
@@ -251,7 +248,7 @@ export class AuthService {
     );
 
     return {
-      message: 'Si el correo existe, recibirás instrucciones para restablecer tu contraseña',
+      message: 'Te enviamos instrucciones para restablecer tu contraseña',
     };
   }
 
