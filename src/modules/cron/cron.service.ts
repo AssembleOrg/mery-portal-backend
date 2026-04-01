@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../shared/services';
+import { CouponsService } from '../coupons/coupons.service';
 
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly couponsService: CouponsService,
+  ) {}
 
   /**
    * Cron job que se ejecuta todos los días a las 3 AM (zona horaria del servidor)
@@ -148,5 +152,24 @@ export class CronService {
   //   // Implementar lógica de envío de emails
   //   // Ejemplo: usar EmailService para notificar a los usuarios
   // }
+
+  /**
+   * Cron job cada minuto: expira consumos de cupones pendientes de pago.
+   * Si alguien consumió un cupón pero no pagó en 15 minutos, se devuelve el uso.
+   */
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'expire-coupon-consumptions',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async expireCouponConsumptions() {
+    try {
+      const count = await this.couponsService.expirePendingConsumptions();
+      if (count > 0) {
+        this.logger.log(`🎫 [CRON] ${count} consumo(s) de cupón expirado(s) y liberado(s)`);
+      }
+    } catch (error) {
+      this.logger.error('❌ [CRON] Error expirando consumos de cupones:', error);
+    }
+  }
 }
 

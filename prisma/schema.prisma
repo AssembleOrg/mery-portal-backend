@@ -105,11 +105,12 @@ model VideoCategory {
   videos           Video[]
   purchases        CategoryPurchase[]
   cartItems        CartItem[]
-  
+  coupons          CouponCategory[]
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   deletedAt        DateTime?
-  
+
   @@map("video_categories")
 }
 
@@ -289,4 +290,56 @@ model PresencialVote {
   @@index([pollId])
   @@index([optionId])
   @@map("presencial_votes")
+}
+
+// Discount coupons
+model Coupon {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  discountPercent Int
+  validFrom       DateTime?
+  validTo         DateTime?
+  maxUses         Int?
+  currentUses     Int       @default(0)
+  isActive        Boolean   @default(true)
+  appliesToAll    Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  categories   CouponCategory[]
+  consumptions CouponConsumption[]
+
+  @@map("coupons")
+}
+
+// Join table: Coupon <-> VideoCategory
+model CouponCategory {
+  id         String        @id @default(cuid())
+  couponId   String
+  categoryId String
+  createdAt  DateTime      @default(now())
+
+  coupon   Coupon        @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  category VideoCategory @relation(fields: [categoryId], references: [id])
+
+  @@unique([couponId, categoryId])
+  @@map("coupon_categories")
+}
+
+// Tracks coupon consumptions pending payment confirmation
+model CouponConsumption {
+  id          String    @id @default(cuid())
+  couponId    String
+  userId      String
+  preferenceId String?
+  status      String    @default("pending") // pending | confirmed | expired
+  consumedAt  DateTime  @default(now())
+  expiresAt   DateTime
+  confirmedAt DateTime?
+
+  coupon Coupon @relation(fields: [couponId], references: [id])
+
+  @@index([status, expiresAt])
+  @@map("coupon_consumptions")
 }
