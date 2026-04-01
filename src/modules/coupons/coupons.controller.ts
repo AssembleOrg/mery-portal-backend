@@ -76,7 +76,13 @@ export class CouponsController {
 
   @Post('confirm-consumption')
   @Public()
-  async confirmConsumption(@Body() body: { couponId: string; userId: string }) {
-    return this.couponsService.confirmConsumption(body.couponId, body.userId);
+  async confirmConsumption(
+    @Body() body: { couponId: string; userId: string; preferenceId?: string },
+  ) {
+    return this.couponsService.confirmConsumption(
+      body.couponId,
+      body.userId,
+      body.preferenceId,
+    );
   }
 }

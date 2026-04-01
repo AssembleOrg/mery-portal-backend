@@ -264,12 +264,62 @@ export class CouponsService {
   }
 
   /**
-   * Mark a consumption as confirmed (called by webhook after payment)
+   * If preferenceId is provided: reserve coupon usage (pending with expiration).
+   * If preferenceId is not provided: confirm latest pending usage for user+coupon.
    */
-  async confirmConsumption(couponId: string, userId: string) {
-    await this.prisma.couponConsumption.updateMany({
-      where: { couponId, userId, status: 'pending' },
-      data: { status: 'confirmed', confirmedAt: new Date() },
+  async confirmConsumption(couponId: string, userId: string, preferenceId?: string) {
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      if (preferenceId) {
+        const existingForPreference = await tx.couponConsumption.findFirst({
+          where: { preferenceId, couponId, userId },
+        });
+        if (existingForPreference) {
+          return;
+        }
+        
+        const coupon = await tx.coupon.findFirst({
+          where: { id: couponId, deletedAt: null },
+        });
+        if (!coupon) {
+          throw new NotFoundException('Cupón no encontrado');
+        }
+
+        // Reserve for the same 15-minute window used by Mercado Pago preference.
+        const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+
+        await tx.coupon.update({
+          where: { id: couponId },
+          data: { currentUses: { increment: 1 } },
+        });
+
+        await tx.couponConsumption.create({
+          data: {
+            couponId,
+            userId,
+            preferenceId,
+            status: 'pending',
+            expiresAt,
+          },
+        });
+        return;
+      }
+
+      // Confirm phase (typically from webhook when payment is approved).
+      const pending = await tx.couponConsumption.findFirst({
+        where: { couponId, userId, status: 'pending' },
+        orderBy: { consumedAt: 'desc' },
+      });
+
+      if (!pending) {
+        return;
+      }
+
+      await tx.couponConsumption.update({
+        where: { id: pending.id },
+        data: { status: 'confirmed', confirmedAt: now },
+      });
     });
   }
 
