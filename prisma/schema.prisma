@@ -292,6 +292,17 @@ model PresencialVote {
   @@map("presencial_votes")
 }
 
+model ProblemReport {
+  id          String   @id @default(cuid())
+  email       String
+  phone       String?
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("problem_reports")
+}
+
 // Discount coupons
 model Coupon {
   id              String    @id @default(cuid())

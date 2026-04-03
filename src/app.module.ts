@@ -16,6 +16,7 @@ import { MercadoPagoModule } from './modules/mercadopago';
 import { CronModule } from './modules/cron';
 import { PresencialesModule } from './modules/presenciales';
 import { CouponsModule } from './modules/coupons';
+import { ProblemReportModule } from './modules/problemReport';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
 import { ResponseInterceptor, LoggingInterceptor } from './shared/interceptors';
@@ -57,6 +58,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     CronModule,
     PresencialesModule,
     CouponsModule,
+    ProblemReportModule,
   ],
   controllers: [AppController],
   providers: [
