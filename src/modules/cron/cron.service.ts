@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../shared/services';
 import { CouponsService } from '../coupons/coupons.service';
+import { ChatService } from '../chat/chat.service';
 
 @Injectable()
 export class CronService {
@@ -10,6 +11,7 @@ export class CronService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly couponsService: CouponsService,
+    private readonly chatService: ChatService,
   ) {}
 
   /**
@@ -169,6 +171,27 @@ export class CronService {
       }
     } catch (error) {
       this.logger.error('❌ [CRON] Error expirando consumos de cupones:', error);
+    }
+  }
+
+  /**
+   * Recomputa el estado de todas las salas de chat una vez por día.
+   * Maneja las transiciones ACTIVE → GRACE (compra expirada) y GRACE → CLOSED
+   * (pasaron los 90 días de gracia). LOCKED → ACTIVE se gatilla on-demand
+   * desde el front al abrir la sala.
+   */
+  @Cron('15 3 * * *', {
+    name: 'recompute-chat-room-status',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async recomputeChatRoomStatus() {
+    try {
+      const { updated } = await this.chatService.recomputeAllRoomStatuses();
+      if (updated > 0) {
+        this.logger.log(`💬 [CRON] ${updated} sala(s) de chat transicionaron de estado`);
+      }
+    } catch (error) {
+      this.logger.error('❌ [CRON] Error recomputando estados de chat:', error);
     }
   }
 }

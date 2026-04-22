@@ -44,6 +44,8 @@ model User {
   videoViews        VideoView[]
   cart              Cart?
   presencialVotes   PresencialVote[]
+  chatRooms         ChatRoom[]
+  chatMessages     ChatMessage[]
   
   // Audit fields
   createdAt DateTime @default(now())
@@ -106,6 +108,7 @@ model VideoCategory {
   purchases        CategoryPurchase[]
   cartItems        CartItem[]
   coupons          CouponCategory[]
+  chatRooms        ChatRoom[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -353,4 +356,76 @@ model CouponConsumption {
 
   @@index([status, expiresAt])
   @@map("coupon_consumptions")
+}
+
+// ============================================================================
+// CHAT
+// ============================================================================
+
+enum ChatRoomStatus {
+  LOCKED  // compra activa pero progreso de videos < 95%
+  ACTIVE  // desbloqueado: alumno y admin pueden chatear
+  GRACE   // compra expiró, dentro de 90 días post-expiración, sigue activo
+  CLOSED  // pasaron los 90 días de gracia → solo lectura
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+}
+
+enum ChatSenderRole {
+  STUDENT
+  ADMIN
+}
+
+model ChatRoom {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId       String
+  category         VideoCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  status           ChatRoomStatus  @default(LOCKED)
+  unlockedAt       DateTime?       // primera vez que pasó a ACTIVE
+  gracePeriodEnd   DateTime?       // expiresAt + 90 días (solo si aplica)
+
+  // First student message marker (para enviar email una sola vez)
+  studentInitiated Boolean         @default(false)
+
+  // Read tracking (1-a-1: sabemos quién leyó hasta cuándo)
+  lastMessageAt     DateTime?
+  lastStudentReadAt DateTime?
+  lastAdminReadAt   DateTime?
+
+  messages         ChatMessage[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([userId, categoryId])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@map("chat_rooms")
+}
+
+model ChatMessage {
+  id         String           @id @default(cuid())
+  roomId     String
+  room       ChatRoom         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  senderRole ChatSenderRole
+
+  type       ChatMessageType  @default(TEXT)
+  content    String?          @db.Text
+  imageUrl   String?
+  imageKey   String?          // key en DO Spaces, para poder borrar si hace falta
+
+  readAt     DateTime?
+
+  createdAt  DateTime         @default(now())
+
+  @@index([roomId, createdAt])
+  @@map("chat_messages")
 }

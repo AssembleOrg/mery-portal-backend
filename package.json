@@ -26,6 +26,8 @@
     "setup": "chmod +x scripts/setup-db.sh && ./scripts/setup-db.sh"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1034.0",
+    "@aws-sdk/s3-request-presigner": "^3.1034.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -33,9 +35,11 @@
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.19",
     "@nestjs/schedule": "^6.0.1",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
+    "@nestjs/websockets": "^11.1.19",
     "@prisma/client": "^6.16.3",
     "@sendinblue/client": "^3.3.1",
     "@types/bcryptjs": "^3.0.0",
@@ -59,6 +63,7 @@
     "prisma": "^6.16.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
     "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
