@@ -25,6 +25,7 @@
     "db:seed": "prisma db seed",
     "setup": "chmod +x scripts/setup-db.sh && ./scripts/setup-db.sh"
   },
+  "packageManager": "pnpm@10.9.0",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1034.0",
     "@aws-sdk/s3-request-presigner": "^3.1034.0",

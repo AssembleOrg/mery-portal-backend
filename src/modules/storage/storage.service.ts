@@ -18,7 +18,14 @@ export class StorageService {
   private readonly endpoint: string;
 
   constructor(private readonly config: ConfigService) {
-    this.endpoint = this.config.get<string>('DO_SPACES_ENDPOINT', '');
+    const rawEndpoint = this.config.get<string>('DO_SPACES_ENDPOINT', '').trim();
+    // Normalizamos: siempre con https://. Si viene "nyc3.digitaloceanspaces.com"
+    // el SDK lo trata como región y arma el host de AWS por default.
+    this.endpoint = rawEndpoint
+      ? /^https?:\/\//i.test(rawEndpoint)
+        ? rawEndpoint
+        : `https://${rawEndpoint}`
+      : '';
     const region = this.config.get<string>('DO_SPACES_REGION', 'us-east-1');
     const accessKeyId = this.config.get<string>('DO_SPACES_KEY', '');
     const secretAccessKey = this.config.get<string>('DO_SPACES_SECRET', '');
@@ -27,7 +34,13 @@ export class StorageService {
 
     if (!this.endpoint || !accessKeyId || !secretAccessKey || !this.bucket) {
       this.logger.warn(
-        'DigitalOcean Spaces no está configurado correctamente (DO_SPACES_ENDPOINT/KEY/SECRET/BUCKET faltan). Las subidas fallarán.',
+        `DigitalOcean Spaces no está configurado correctamente. endpoint=${!!this.endpoint} key=${!!accessKeyId} secret=${!!secretAccessKey} bucket=${!!this.bucket}`,
+      );
+    } else {
+      this.logger.log(
+        `DigitalOcean Spaces configurado: endpoint=${this.endpoint} region=${region} bucket=${this.bucket} cdn=${
+          this.cdnUrl ?? '(sin CDN)'
+        }`,
       );
     }
 
@@ -35,10 +48,12 @@ export class StorageService {
       endpoint: this.endpoint,
       region,
       credentials: { accessKeyId, secretAccessKey },
-      forcePathStyle: false,
+      // Path-style: URLs del tipo https://endpoint/bucket/key. Evita que el SDK
+      // reescriba el host con virtual-hosted-style (que termina resolviendo a AWS
+      // en vez de DO cuando el endpoint no se interpreta correctamente).
+      forcePathStyle: true,
       // DigitalOcean Spaces NO soporta los headers de checksum que el SDK de
       // AWS empezó a mandar por default desde v3.7xx (x-amz-checksum-crc32, etc.).
-      // Sin esto, el SDK falla al serializar el request o el server lo rechaza.
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
     });
@@ -103,8 +118,10 @@ export class StorageService {
     if (this.cdnUrl) {
       return `${this.cdnUrl.replace(/\/+$/, '')}/${key}`;
     }
-    // Fallback al endpoint público de Spaces
-    const host = this.endpoint.replace(/^https?:\/\//, '');
+    // Sin CDN: DO Spaces soporta tanto virtual-hosted como path-style.
+    // Usamos virtual-hosted para URLs más "limpias" en público:
+    //   https://{bucket}.{host}/{key}
+    const host = this.endpoint.replace(/^https?:\/\//, '').replace(/\/+$/, '');
     return `https://${this.bucket}.${host}/${key}`;
   }
 
