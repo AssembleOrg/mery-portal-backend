@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../shared/services';
-import { PasswordUtil, DateTimeUtil } from '../../shared/utils';
+import { PasswordUtil, DateTimeUtil, normalizeEmail } from '../../shared/utils';
 import { JwtPayload, UserRole } from '../../shared/types';
 import { LoginDto, RegisterDto, AuthResponseDto, VerifyEmailDto, ResendVerificationDto, ForgotPasswordDto, ResetPasswordDto, ChangePasswordDto, MeResponseDto } from './dto';
 import { EmailService } from '../email/email.service';
@@ -18,7 +18,10 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto): Promise<{ message: string }> {
-    const { email, password, firstName, lastName, phone, country, city } = registerDto;
+    const { password, firstName, lastName, phone, country, city } = registerDto;
+    // Defensive normalization in addition to DTO @Transform — Passport/other
+    // callers may bypass the ValidationPipe.
+    const email = normalizeEmail(registerDto.email);
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -84,8 +87,11 @@ export class AuthService {
   }
 
   async validateUser(email: string, password: string): Promise<any> {
+    // Passport's LocalStrategy calls us with the raw email from the request
+    // body (it bypasses the LoginDto's @Transform). Normalize defensively.
+    const normalizedEmail = normalizeEmail(email);
     const user = await this.prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (!user || user.deletedAt) {
@@ -145,7 +151,7 @@ export class AuthService {
   }
 
   async resendVerificationEmail(resendDto: ResendVerificationDto): Promise<{ message: string }> {
-    const { email } = resendDto;
+    const email = normalizeEmail(resendDto.email);
 
     const user = await this.prisma.user.findUnique({
       where: { email, deletedAt: null },
@@ -198,7 +204,7 @@ export class AuthService {
   }
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<{ message: string }> {
-    const { email } = forgotPasswordDto;
+    const email = normalizeEmail(forgotPasswordDto.email);
 
     const user = await this.prisma.user.findUnique({
       where: { email, deletedAt: null },

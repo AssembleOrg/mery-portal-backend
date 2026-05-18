@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
-import { PasswordUtil } from '../../shared/utils';
+import { PasswordUtil, normalizeEmail } from '../../shared/utils';
 import { PaginatedResponse } from '../../shared/types';
 import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, MigrateUserDto } from './dto';
 import { plainToClass } from 'class-transformer';
@@ -14,7 +14,8 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    const { email, password, ...userData } = createUserDto;
+    const { email: rawEmail, password, ...userData } = createUserDto;
+    const email = normalizeEmail(rawEmail);
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -381,7 +382,8 @@ export class UsersService {
    * and sends individual email (no email verification needed)
    */
   async migrateUser(migrateUserDto: MigrateUserDto): Promise<{ message: string; temporaryPassword: string }> {
-    const { email, firstName, lastName } = migrateUserDto;
+    const { firstName, lastName } = migrateUserDto;
+    const email = normalizeEmail(migrateUserDto.email);
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({

@@ -1,8 +1,11 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { normalizeEmail } from '../../../shared/utils';
 
 export class MigrateUserDto {
   @ApiProperty({ example: 'user@example.com', description: 'Email del usuario a migrar' })
+  @Transform(({ value }) => normalizeEmail(value))
   @IsEmail({}, { message: 'Debe ser un email válido' })
   @IsNotEmpty({ message: 'El email es requerido' })
   email: string;
