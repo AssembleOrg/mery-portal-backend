@@ -46,6 +46,7 @@ model User {
   presencialVotes   PresencialVote[]
   chatRooms         ChatRoom[]
   chatMessages     ChatMessage[]
+  quizAttempts      QuizAttempt[]
   
   // Audit fields
   createdAt DateTime @default(now())
@@ -102,6 +103,10 @@ model VideoCategory {
   // Pricing (a nivel de curso/categoría) - Dual currency
   priceARS         Decimal  @db.Decimal(10, 2)
   priceUSD         Decimal  @db.Decimal(10, 2)
+  // Snapshot del precio previo a la promo activa (null si no hay descuento real aplicado).
+  // Se usa para restaurar al finalizar la promo sin perder centavos por redondeo.
+  originalPriceARS Decimal? @db.Decimal(10, 2)
+  originalPriceUSD Decimal? @db.Decimal(10, 2)
   isFree           Boolean  @default(false)
   
   videos           Video[]
@@ -109,6 +114,7 @@ model VideoCategory {
   cartItems        CartItem[]
   coupons          CouponCategory[]
   chatRooms        ChatRoom[]
+  quizAttempts     QuizAttempt[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -407,6 +413,31 @@ model ChatRoom {
   @@index([status])
   @@index([lastMessageAt])
   @@map("chat_rooms")
+}
+
+// ============================================================================
+// QUIZ (examen final por categoría — gate del chat para cursos de cejas)
+// ============================================================================
+
+model QuizAttempt {
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId       String
+  category         VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // Respuestas enviadas: { [questionId]: boolean } (true = Verdadero)
+  answers          Json
+  // IDs de preguntas respondidas mal (se muestran al alumno, sin explicación)
+  wrongQuestionIds Json
+  correctCount     Int
+  totalQuestions   Int
+  passed           Boolean
+
+  createdAt        DateTime      @default(now())
+
+  @@index([userId, categoryId, createdAt])
+  @@map("quiz_attempts")
 }
 
 model ChatMessage {

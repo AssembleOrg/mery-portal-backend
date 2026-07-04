@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../../shared/services';
 import { PasswordUtil, normalizeEmail } from '../../shared/utils';
 import { PaginatedResponse } from '../../shared/types';
-import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, MigrateUserDto } from './dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, RenewCourseDto, MigrateUserDto } from './dto';
 import { plainToClass } from 'class-transformer';
 import { EmailService } from '../email/email.service';
 
@@ -291,9 +291,10 @@ export class UsersService {
       );
     }
 
-    // Calculate expiration date (183 days from now - approximately 6 months)
+    // Calculate expiration date (default: 12 months — los cursos se venden por 1 año)
+    const months = dto.durationMonths ?? 12;
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 183);
+    expiresAt.setMonth(expiresAt.getMonth() + months);
 
     // Create category purchase (manual assignment)
     const categoryPurchase = await this.prisma.categoryPurchase.create({
@@ -333,6 +334,69 @@ export class UsersService {
     });
 
     return categoryPurchase;
+  }
+
+  /**
+   * Renew an existing course access (admin only).
+   * El pago se maneja fuera de la plataforma: acá solo extendemos el vencimiento.
+   * - Acceso vigente: se suman los meses al vencimiento actual.
+   * - Acceso vencido (o sin fecha): se suman los meses desde hoy.
+   */
+  async renewCourse(
+    userId: string,
+    categoryId: string,
+    dto: RenewCourseDto,
+  ) {
+    const access = await this.prisma.categoryPurchase.findUnique({
+      where: {
+        userId_categoryId: { userId, categoryId },
+      },
+      include: {
+        category: { select: { name: true } },
+      },
+    });
+
+    if (!access) {
+      throw new NotFoundException(
+        'El usuario no tiene acceso previo a esta categoría. Usá la asignación manual.',
+      );
+    }
+
+    const now = new Date();
+    const base =
+      access.expiresAt && access.expiresAt > now ? access.expiresAt : now;
+    const newExpiresAt = new Date(base);
+    newExpiresAt.setMonth(newExpiresAt.getMonth() + dto.durationMonths);
+
+    const updated = await this.prisma.categoryPurchase.update({
+      where: {
+        userId_categoryId: { userId, categoryId },
+      },
+      data: {
+        expiresAt: newExpiresAt,
+        isActive: true,
+        paymentStatus: 'completed',
+        ...(dto.amount !== undefined ? { amount: dto.amount } : {}),
+        ...(dto.currency ? { currency: dto.currency } : {}),
+        ...(dto.paymentMethod ? { paymentMethod: dto.paymentMethod } : {}),
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    return {
+      previousExpiresAt: access.expiresAt,
+      expiresAt: updated.expiresAt,
+      durationMonths: dto.durationMonths,
+      category: updated.category,
+    };
   }
 
   /**

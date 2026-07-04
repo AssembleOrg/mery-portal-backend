@@ -18,7 +18,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, MigrateUserDto } from './dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, RenewCourseDto, MigrateUserDto } from './dto';
 import { JwtAuthGuard, RolesGuard } from '../../shared/guards';
 import { Roles, Auditory } from '../../shared/decorators';
 import { UserRole } from '../../shared/types';
@@ -181,6 +181,35 @@ export class UsersController {
     return {
       success: true,
       message: 'Curso asignado exitosamente',
+      data: result,
+    };
+  }
+
+  /**
+   * Renew an existing course access
+   */
+  @Post(':userId/categories/:categoryId/renew')
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @HttpCode(HttpStatus.OK)
+  @Auditory({ action: 'RENEW_COURSE', entity: 'CategoryPurchase' })
+  @ApiOperation({ summary: 'Renovar acceso a un curso ya asignado (3, 6 o 12 meses)' })
+  @ApiResponseDoc({
+    status: 200,
+    description: 'Acceso renovado exitosamente',
+  })
+  @ApiResponseDoc({
+    status: 404,
+    description: 'El usuario no tiene acceso previo a esta categoría',
+  })
+  async renewCourse(
+    @Param('userId') userId: string,
+    @Param('categoryId') categoryId: string,
+    @Body() dto: RenewCourseDto,
+  ) {
+    const result = await this.usersService.renewCourse(userId, categoryId, dto);
+    return {
+      success: true,
+      message: 'Curso renovado exitosamente',
       data: result,
     };
   }

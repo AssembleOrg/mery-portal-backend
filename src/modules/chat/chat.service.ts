@@ -9,6 +9,7 @@ import { ChatMessageType, ChatRoomStatus, ChatSenderRole, Prisma } from '@prisma
 import { PrismaService } from '../../shared/services';
 import { UserRole } from '../../shared/types';
 import { StorageService } from '../storage/storage.service';
+import { isQuizRequiredForSlug } from '../quiz/quiz-definitions';
 
 export const MIN_VIDEO_PROGRESS_PERCENT = 95;
 export const GRACE_DAYS_AFTER_EXPIRATION = 90;
@@ -51,11 +52,26 @@ export class ChatService {
     videosTotal: number;
     videosCompleted: number;
     purchaseActive: boolean;
+    quizRequired: boolean;
+    quizPassed: boolean;
   }> {
     const now = new Date();
     const purchase = await this.prisma.categoryPurchase.findUnique({
       where: { userId_categoryId: { userId, categoryId } },
     });
+    const category = await this.prisma.videoCategory.findUnique({
+      where: { id: categoryId },
+      select: { slug: true },
+    });
+    const quizRequired = category
+      ? isQuizRequiredForSlug(category.slug)
+      : false;
+    const quizPassed = quizRequired
+      ? (await this.prisma.quizAttempt.findFirst({
+          where: { userId, categoryId, passed: true },
+          select: { id: true },
+        })) !== null
+      : false;
     const videos = await this.prisma.video.findMany({
       where: { categoryId, isPublished: true, deletedAt: null },
       select: { id: true },
@@ -85,6 +101,8 @@ export class ChatService {
         videosTotal,
         videosCompleted,
         purchaseActive: false,
+        quizRequired,
+        quizPassed,
       };
     }
 
@@ -101,12 +119,17 @@ export class ChatService {
         videosTotal,
         videosCompleted,
         purchaseActive: purchase.isActive,
+        quizRequired,
+        quizPassed,
       };
     }
 
-    // Compra activa + 95% progreso en todos los videos → ACTIVE, sino LOCKED
+    // Compra activa + 95% progreso en todos los videos + examen aprobado
+    // (si la categoría lo exige) → ACTIVE, sino LOCKED
     const unlocked =
-      videosTotal > 0 && videosCompleted === videosTotal;
+      videosTotal > 0 &&
+      videosCompleted === videosTotal &&
+      (!quizRequired || quizPassed);
     return {
       status: unlocked ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
       gracePeriodEnd: null,
@@ -114,6 +137,8 @@ export class ChatService {
       videosTotal,
       videosCompleted,
       purchaseActive: purchase.isActive,
+      quizRequired,
+      quizPassed,
     };
   }
 
