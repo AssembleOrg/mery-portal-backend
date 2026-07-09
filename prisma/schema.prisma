@@ -460,3 +460,51 @@ model ChatMessage {
   @@index([roomId, createdAt])
   @@map("chat_messages")
 }
+
+// ============ Public Form Builder ============
+
+enum FormStatus {
+  draft
+  published
+  closed
+}
+
+model Form {
+  id             String       @id @default(cuid())
+  title          String
+  slug           String       @unique
+  description    String?      @db.Text
+  status         FormStatus   @default(draft)
+
+  // Field definitions as JSON array: Array<{ id, type, label, description?, placeholder?, required?, options?: [{id,label}], allowContext?, contextLabel? }>
+  fields         Json         @default("[]")
+
+  successMessage String?      @db.Text
+  closedMessage  String?      @db.Text
+  submitLabel    String?
+
+  responses      FormResponse[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([status])
+  @@map("forms")
+}
+
+model FormResponse {
+  id        String   @id @default(cuid())
+  formId    String
+  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  // { [fieldId]: string | string[] | { value: boolean, context?: string } }
+  answers   Json
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([formId, createdAt])
+  @@map("form_responses")
+}
