@@ -115,6 +115,153 @@ export class EmailService {
     }
   }
 
+  /**
+   * Confirmación + invitación formal a un evento (ej: Master Class de Autostyling).
+   * Se dispara cuando un admin acepta una respuesta de formulario.
+   */
+  async sendEventInvitationEmail(
+    email: string,
+    name: string,
+    opts: {
+      eventTitle: string;
+      horario?: string | null;
+      eventDetails?: string | null;
+    },
+  ): Promise<void> {
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.sender = {
+      name: 'Mery Garcia - Autostyling',
+      email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+    };
+    sendSmtpEmail.to = [{ email, name }];
+    sendSmtpEmail.subject = `Confirmado ✦ Tu lugar en ${opts.eventTitle}`;
+    sendSmtpEmail.htmlContent = this.getEventInvitationTemplate(name, opts);
+
+    try {
+      await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      this.logger.log(`Event invitation email sent to ${email}`);
+    } catch (error) {
+      this.logger.error(`Failed to send event invitation email to ${email}:`, error);
+      throw error;
+    }
+  }
+
+  private getEventInvitationTemplate(
+    name: string,
+    opts: { eventTitle: string; horario?: string | null; eventDetails?: string | null },
+  ): string {
+    const horarioBlock = opts.horario
+      ? `
+              <tr>
+                <td style="padding: 6px 0;">
+                  <span style="display:inline-block; width:120px; color:#9a7d82; font-size:12px; letter-spacing:1px; text-transform:uppercase; vertical-align:top;">Tu horario</span>
+                  <span style="color:#660e1b; font-size:16px; font-weight:600;">${opts.horario}</span>
+                </td>
+              </tr>`
+      : '';
+
+    const detailsBlock = opts.eventDetails
+      ? `
+              <tr>
+                <td style="padding: 6px 0;">
+                  <span style="display:inline-block; width:120px; color:#9a7d82; font-size:12px; letter-spacing:1px; text-transform:uppercase; vertical-align:top;">Detalles</span>
+                  <span style="color:#3a2c2e; font-size:15px; line-height:1.6; white-space:pre-line;">${opts.eventDetails}</span>
+                </td>
+              </tr>`
+      : '';
+
+    return `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${opts.eventTitle}</title>
+      </head>
+      <body style="margin:0; padding:0; background-color:#FBE8EA; font-family:'Helvetica Neue', Arial, sans-serif;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBE8EA; padding:32px 12px;">
+          <tr>
+            <td align="center">
+              <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 8px 30px rgba(102,14,27,0.12);">
+
+                <!-- Header -->
+                <tr>
+                  <td style="background-color:#660e1b; padding:44px 24px; text-align:center;">
+                    <h1 style="margin:0; color:#ffffff; font-size:22px; font-weight:300; letter-spacing:10px;">MERY GARCIA</h1>
+                    <p style="margin:8px 0 0; color:#e9c9ce; font-size:11px; letter-spacing:4px;">AUTOSTYLING</p>
+                  </td>
+                </tr>
+
+                <!-- Confirmation badge -->
+                <tr>
+                  <td style="padding:36px 40px 8px; text-align:center;">
+                    <span style="display:inline-block; background-color:#FBE8EA; color:#660e1b; font-size:12px; letter-spacing:2px; text-transform:uppercase; padding:8px 18px; border-radius:999px;">✦ Lugar confirmado</span>
+                  </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                  <td style="padding:16px 40px 8px;">
+                    <p style="margin:0 0 18px; color:#1a1012; font-size:20px; font-weight:600;">Hola ${name || 'que alegría tenerte'},</p>
+                    <p style="margin:0 0 22px; color:#5a4a4d; font-size:15px; line-height:1.7;">
+                      Nos encanta contarte que tu lugar quedó <strong style="color:#660e1b;">confirmado</strong>. Queremos invitarte formalmente a
+                      <strong style="color:#660e1b;">${opts.eventTitle}</strong>. Va a ser una experiencia pensada con muchísimo cariño para vos.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Event card -->
+                <tr>
+                  <td style="padding:0 40px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fdf5f6; border:1px solid #f3dfe3; border-radius:12px; padding:22px 24px;">
+                      <tr>
+                        <td>
+                          <p style="margin:0 0 12px; color:#660e1b; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Tu invitación</p>
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                            ${horarioBlock}
+                            ${detailsBlock}
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Closing -->
+                <tr>
+                  <td style="padding:26px 40px 8px;">
+                    <p style="margin:0 0 20px; color:#5a4a4d; font-size:15px; line-height:1.7;">
+                      Te pedimos llegar unos minutos antes de tu horario para acreditarte. Si necesitás avisarnos algo, respondé este mail y te ayudamos.
+                    </p>
+                    <p style="margin:0; color:#1a1012; font-size:15px; line-height:1.7;">
+                      ¡Te esperamos!<br>
+                      <strong style="color:#660e1b;">El equipo de Mery García</strong>
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr><td style="padding:28px 40px 0;"><div style="height:1px; background-color:#f0e4e6;"></div></td></tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding:22px 40px 34px; text-align:center;">
+                    <p style="margin:0; color:#b39aa0; font-size:12px; line-height:1.7;">
+                      Recibís este correo porque completaste el formulario de reserva.<br>
+                      © ${new Date().getFullYear()} Mery García. Todos los derechos reservados.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+  }
+
   private getVerificationEmailTemplate(name: string, verificationUrl: string): string {
     return `
       <!DOCTYPE html>

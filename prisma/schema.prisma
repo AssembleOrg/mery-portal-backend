@@ -503,8 +503,13 @@ model FormResponse {
   ipAddress String?
   userAgent String?
 
+  // pending | accepted | rejected — decisión de acceso/invitación al evento
+  status           String    @default("pending")
+  invitationSentAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([formId, createdAt])
+  @@index([formId, status])
   @@map("form_responses")
 }

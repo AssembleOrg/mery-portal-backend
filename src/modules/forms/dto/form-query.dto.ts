@@ -44,4 +44,15 @@ export class FormResponsesQueryDto {
   @Min(1)
   @Max(200)
   limit?: number = 25;
+
+  @ApiPropertyOptional({ enum: ['pending', 'accepted', 'rejected'], description: 'Filtrar por estado de decisión' })
+  @IsOptional()
+  @IsIn(['pending', 'accepted', 'rejected'])
+  status?: 'pending' | 'accepted' | 'rejected';
+}
+
+export class UpdateResponseStatusDto {
+  @ApiPropertyOptional({ enum: ['pending', 'accepted', 'rejected'] })
+  @IsIn(['pending', 'accepted', 'rejected'])
+  status: 'pending' | 'accepted' | 'rejected';
 }

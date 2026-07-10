@@ -27,6 +27,7 @@ import {
   FormQueryDto,
   FormResponsesQueryDto,
   SubmitFormResponseDto,
+  UpdateResponseStatusDto,
 } from './dto';
 import { JwtAuthGuard, RolesGuard } from '~/shared/guards';
 import { Roles } from '~/shared/decorators';
@@ -132,6 +133,24 @@ export class FormsController {
   @ApiParam({ name: 'id' })
   async getResponses(@Param('id') id: string, @Query() query: FormResponsesQueryDto) {
     return this.formsService.getResponses(id, query);
+  }
+
+  @Patch(':id/responses/:responseId/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary:
+      'Cambiar estado de una respuesta (aceptar/rechazar). Al aceptar envía email de invitación (Admin/SubAdmin)',
+  })
+  @ApiParam({ name: 'id' })
+  @ApiParam({ name: 'responseId' })
+  async updateResponseStatus(
+    @Param('id') id: string,
+    @Param('responseId') responseId: string,
+    @Body() dto: UpdateResponseStatusDto,
+  ) {
+    return this.formsService.updateResponseStatus(id, responseId, dto);
   }
 
   @Get(':id/analytics')

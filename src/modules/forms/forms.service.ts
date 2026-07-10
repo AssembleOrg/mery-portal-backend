@@ -16,7 +16,9 @@ import {
   UpdateFormDto,
   FormQueryDto,
   FormResponsesQueryDto,
+  UpdateResponseStatusDto,
 } from './dto';
+import { EmailService } from '../email/email.service';
 
 const TIMEZONE = 'America/Argentina/Buenos_Aires';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,7 +29,10 @@ type YesNoAnswer = { value: boolean; context?: string };
 
 @Injectable()
 export class FormsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   // ============ Helpers ============
 
@@ -386,15 +391,17 @@ export class FormsService {
     const form = await this.findFormOrFail(formId);
     const page = query.page || 1;
     const limit = query.limit || 25;
+    const where: Prisma.FormResponseWhereInput = { formId };
+    if (query.status) where.status = query.status;
 
     const [responses, total] = await Promise.all([
       this.prisma.formResponse.findMany({
-        where: { formId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      this.prisma.formResponse.count({ where: { formId } }),
+      this.prisma.formResponse.count({ where }),
     ]);
 
     return {
@@ -418,8 +425,15 @@ export class FormsService {
     const responses = await this.prisma.formResponse.findMany({
       where: { formId },
       orderBy: { createdAt: 'asc' },
-      select: { answers: true, createdAt: true },
+      select: { answers: true, createdAt: true, status: true },
     });
+
+    const statusCounts = { pending: 0, accepted: 0, rejected: 0 };
+    for (const r of responses) {
+      if (r.status === 'accepted') statusCounts.accepted++;
+      else if (r.status === 'rejected') statusCounts.rejected++;
+      else statusCounts.pending++;
+    }
 
     const now = DateTime.now().setZone(TIMEZONE);
     const todayStart = now.startOf('day');
@@ -499,7 +513,93 @@ export class FormsService {
       lastResponseAt: responses[responses.length - 1]?.createdAt ?? null,
       byDay,
       distributions,
+      statusCounts,
     };
+  }
+
+  /**
+   * Cambia el estado de decisión de una respuesta (pending/accepted/rejected).
+   * Al aceptar por primera vez, envía el email de confirmación + invitación formal.
+   */
+  async updateResponseStatus(
+    formId: string,
+    responseId: string,
+    dto: UpdateResponseStatusDto,
+  ) {
+    const form = await this.findFormOrFail(formId);
+    const response = await this.prisma.formResponse.findFirst({
+      where: { id: responseId, formId },
+    });
+    if (!response) {
+      throw new NotFoundException('Respuesta no encontrada');
+    }
+
+    let invitationSentAt = response.invitationSentAt ?? null;
+
+    // Enviar invitación solo la primera vez que se acepta
+    if (dto.status === 'accepted' && !invitationSentAt) {
+      const contact = this.extractInvitationData(
+        (form.fields as unknown as FormFieldDto[]) || [],
+        response.answers as Record<string, unknown>,
+      );
+
+      if (!contact.email || !EMAIL_REGEX.test(contact.email)) {
+        throw new BadRequestException(
+          'La respuesta no tiene un email válido para enviar la invitación',
+        );
+      }
+
+      try {
+        await this.emailService.sendEventInvitationEmail(contact.email, contact.name, {
+          eventTitle: form.title,
+          horario: contact.horario,
+          eventDetails: contact.eventDetails,
+        });
+        invitationSentAt = new Date();
+      } catch {
+        throw new BadRequestException(
+          'No se pudo enviar el email de invitación. Intentá de nuevo.',
+        );
+      }
+    }
+
+    return this.prisma.formResponse.update({
+      where: { id: responseId },
+      data: { status: dto.status, invitationSentAt },
+    });
+  }
+
+  /** Extrae email, nombre, horario y detalles del evento desde las respuestas. */
+  private extractInvitationData(
+    fields: FormFieldDto[],
+    answers: Record<string, unknown>,
+  ): { email: string; name: string; horario: string | null; eventDetails: string | null } {
+    const real = fields.filter((f) => f.id);
+
+    const emailField = real.find((f) => f.type === 'email');
+    const email = emailField ? String(answers[emailField.id!] ?? '').trim() : '';
+
+    const nameField = real.find((f) => f.type === 'text');
+    const name = nameField ? String(answers[nameField.id!] ?? '').trim() : '';
+
+    // Horario: primer radio cuya etiqueta menciona "horario", si no, cualquier radio
+    const horarioField =
+      real.find((f) => f.type === 'radio' && /horario/i.test(f.label)) ||
+      real.find((f) => f.type === 'radio');
+    let horario: string | null = null;
+    if (horarioField) {
+      const val = answers[horarioField.id!];
+      horario =
+        horarioField.options?.find((o) => o.id === val)?.label || (val ? String(val) : null);
+    }
+
+    // Detalles del evento: bloque info cuya etiqueta menciona "fecha"
+    const infoField =
+      real.find((f) => f.type === 'info' && /fecha|masterclass|master class/i.test(f.label)) ||
+      fields.find((f) => f.type === 'info');
+    const eventDetails = infoField?.description?.trim() || null;
+
+    return { email, name, horario, eventDetails };
   }
 
   async exportCsv(formId: string): Promise<{ filename: string; content: string }> {
