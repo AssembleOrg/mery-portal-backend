@@ -500,6 +500,8 @@ model FormResponse {
 
   // { [fieldId]: string | string[] | { value: boolean, context?: string } }
   answers   Json
+  // Email extraído del primer campo tipo "email" (normalizado lowercase) para dedup
+  email     String?
   ipAddress String?
   userAgent String?
 
@@ -509,6 +511,7 @@ model FormResponse {
 
   createdAt DateTime @default(now())
 
+  @@unique([formId, email])
   @@index([formId, createdAt])
   @@index([formId, status])
   @@map("form_responses")

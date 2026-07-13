@@ -291,14 +291,38 @@ export class FormsService {
     const fields = (form.fields as unknown as FormFieldDto[]) || [];
     const cleanAnswers = this.validateAnswers(fields, dto.answers);
 
-    await this.prisma.formResponse.create({
-      data: {
-        formId: form.id,
-        answers: cleanAnswers as Prisma.InputJsonValue,
-        ipAddress: ipAddress?.slice(0, 100),
-        userAgent: userAgent?.slice(0, 300),
-      },
-    });
+    const emailField = fields.find((f) => f.type === 'email' && f.id);
+    const email = emailField ? (cleanAnswers[emailField.id!] as string | undefined) || null : null;
+
+    if (email) {
+      const existing = await this.prisma.formResponse.findUnique({
+        where: { formId_email: { formId: form.id, email } },
+      });
+      if (existing) {
+        throw new ConflictException(
+          'Ya recibimos una respuesta con este email para este formulario. Si necesitás modificar tus datos, escribinos.',
+        );
+      }
+    }
+
+    try {
+      await this.prisma.formResponse.create({
+        data: {
+          formId: form.id,
+          answers: cleanAnswers as Prisma.InputJsonValue,
+          email,
+          ipAddress: ipAddress?.slice(0, 100),
+          userAgent: userAgent?.slice(0, 300),
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(
+          'Ya recibimos una respuesta con este email para este formulario. Si necesitás modificar tus datos, escribinos.',
+        );
+      }
+      throw e;
+    }
 
     return {
       success: true,
