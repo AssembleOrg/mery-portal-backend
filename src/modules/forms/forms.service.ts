@@ -302,7 +302,9 @@ export class FormsService {
 
     return {
       success: true,
-      message: form.successMessage || '¡Gracias! Recibimos tu respuesta.',
+      message:
+        form.successMessage ||
+        'Gracias por completar el formulario. Muy pronto recibirás la confirmación de tu lugar por email.',
     };
   }
 

@@ -120,7 +120,7 @@ async function main() {
     status: (PUBLISH ? 'published' : 'draft') as 'published' | 'draft',
     fields,
     successMessage:
-      '¡Gracias por registrarte! Tu lugar quedó reservado. Nos vemos el viernes 24/7 en Cabildo 1985, CABA. 💕',
+      '¡Gracias por registrarte! Recibimos tu inscripción correctamente. En breve te enviaremos por email la confirmación de tu lugar para el viernes 24/7 en Cabildo 1985, CABA. 💕',
     closedMessage:
       'Las inscripciones a la Master Class ya están cerradas. ¡Gracias por tu interés!',
     submitLabel: 'Reservar mi lugar',
