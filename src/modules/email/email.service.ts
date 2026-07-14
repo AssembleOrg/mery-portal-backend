@@ -134,7 +134,7 @@ export class EmailService {
       email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
     };
     sendSmtpEmail.to = [{ email, name }];
-    sendSmtpEmail.subject = `Confirmado ✦ Tu lugar en ${opts.eventTitle}`;
+    sendSmtpEmail.subject = `Es oficial: tu lugar en ${opts.eventTitle} está reservado`;
     sendSmtpEmail.htmlContent = this.getEventInvitationTemplate(name, opts);
 
     try {
@@ -146,28 +146,93 @@ export class EmailService {
     }
   }
 
+  private static readonly LOGO_URL =
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/merygarcia_brow_artist_gris_transparente_centrado_clean.png';
+
+  /** Dirección completa del local para que el pin de Maps caiga exacto. */
+  private static readonly VENUE_FULL_ADDRESS =
+    'Av. Cabildo 1985, C1428AAB Cdad. Autónoma de Buenos Aires';
+
+  private mapsUrl(address: string): string {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  }
+
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Renderiza el bloque de detalles (eventDetails multilínea).
+   * Detecta la línea de dirección (prefijo 📍) y la vuelve clickeable a Google Maps
+   * con un enlace "Cómo llegar →". El resto de líneas se muestran como texto.
+   */
+  private renderEventDetails(eventDetails: string): string {
+    const lines = eventDetails
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const parts = lines.map((line) => {
+      const isAddress = line.startsWith('📍');
+      if (!isAddress) {
+        return `<div style="color:#3a2c2e; font-size:15px; line-height:1.9;">${this.escapeHtml(line)}</div>`;
+      }
+
+      // Texto de la dirección sin el emoji/prefijo.
+      let address = line.replace(/^📍\s*/, '').trim();
+      // Normalizamos a la dirección completa cuando es el local de la masterclass,
+      // para que el pin de Maps sea preciso.
+      if (/cabildo\s*1985/i.test(address)) {
+        address = EmailService.VENUE_FULL_ADDRESS;
+      }
+
+      return `
+                          <div style="color:#3a2c2e; font-size:15px; line-height:1.9;">📍 ${this.escapeHtml(address)}</div>
+                          <a href="${this.mapsUrl(address)}" target="_blank" style="display:inline-block; margin-top:6px; color:#4a1220; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; text-decoration:none; font-family:'Helvetica Neue', Arial, sans-serif; border-bottom:1px solid #d8bcc1; padding-bottom:2px;">Cómo llegar &rarr;</a>`;
+    });
+
+    return parts.join('');
+  }
+
   private getEventInvitationTemplate(
     name: string,
     opts: { eventTitle: string; horario?: string | null; eventDetails?: string | null },
   ): string {
-    const horarioBlock = opts.horario
-      ? `
-              <tr>
-                <td style="padding: 6px 0;">
-                  <span style="display:inline-block; width:120px; color:#9a7d82; font-size:12px; letter-spacing:1px; text-transform:uppercase; vertical-align:top;">Tu horario</span>
-                  <span style="color:#660e1b; font-size:16px; font-weight:600;">${opts.horario}</span>
-                </td>
-              </tr>`
-      : '';
+    const rows: string[] = [];
 
-    const detailsBlock = opts.eventDetails
+    if (opts.horario) {
+      rows.push(`
+                      <tr>
+                        <td style="padding:14px 0; border-bottom:1px solid #efe2e4;">
+                          <div style="color:#a98a8f; font-size:11px; letter-spacing:2.5px; text-transform:uppercase; margin-bottom:6px; font-family:'Helvetica Neue', Arial, sans-serif;">Horario</div>
+                          <div style="color:#4a1220; font-size:19px; font-weight:500; letter-spacing:0.3px;">${opts.horario}</div>
+                        </td>
+                      </tr>`);
+    }
+
+    if (opts.eventDetails) {
+      rows.push(`
+                      <tr>
+                        <td style="padding:14px 0;">
+                          <div style="color:#a98a8f; font-size:11px; letter-spacing:2.5px; text-transform:uppercase; margin-bottom:6px; font-family:'Helvetica Neue', Arial, sans-serif;">Detalles</div>
+                          ${this.renderEventDetails(opts.eventDetails)}
+                        </td>
+                      </tr>`);
+    }
+
+    const detailsCard = rows.length
       ? `
-              <tr>
-                <td style="padding: 6px 0;">
-                  <span style="display:inline-block; width:120px; color:#9a7d82; font-size:12px; letter-spacing:1px; text-transform:uppercase; vertical-align:top;">Detalles</span>
-                  <span style="color:#3a2c2e; font-size:15px; line-height:1.6; white-space:pre-line;">${opts.eventDetails}</span>
-                </td>
-              </tr>`
+                <tr>
+                  <td style="padding:8px 56px 0;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eadfe1; border-bottom:1px solid #eadfe1;">
+                      ${rows.join('')}
+                    </table>
+                  </td>
+                </tr>`
       : '';
 
     return `
@@ -178,77 +243,66 @@ export class EmailService {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${opts.eventTitle}</title>
       </head>
-      <body style="margin:0; padding:0; background-color:#FBE8EA; font-family:'Helvetica Neue', Arial, sans-serif;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBE8EA; padding:32px 12px;">
+      <body style="margin:0; padding:0; background-color:#f4ecec; font-family:Georgia, 'Times New Roman', serif;">
+        <!-- Preheader (hidden) -->
+        <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#f4ecec;">Tu lugar está reservado. Lo que sigue lo preparamos con muchísimo cuidado para vos.</div>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4ecec; padding:40px 12px;">
           <tr>
             <td align="center">
-              <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 8px 30px rgba(102,14,27,0.12);">
+              <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff;">
 
-                <!-- Header -->
+                <!-- Logo -->
                 <tr>
-                  <td style="background-color:#660e1b; padding:44px 24px; text-align:center;">
-                    <h1 style="margin:0; color:#ffffff; font-size:22px; font-weight:300; letter-spacing:10px;">MERY GARCIA</h1>
-                    <p style="margin:8px 0 0; color:#e9c9ce; font-size:11px; letter-spacing:4px;">AUTOSTYLING</p>
+                  <td style="padding:48px 40px 0; text-align:center;">
+                    <img src="${EmailService.LOGO_URL}" width="150" alt="Mery García" style="display:block; margin:0 auto; width:150px; max-width:60%; height:auto; border:0;">
                   </td>
                 </tr>
 
-                <!-- Confirmation badge -->
+                <!-- Hero -->
                 <tr>
-                  <td style="padding:36px 40px 8px; text-align:center;">
-                    <span style="display:inline-block; background-color:#FBE8EA; color:#660e1b; font-size:12px; letter-spacing:2px; text-transform:uppercase; padding:8px 18px; border-radius:999px;">✦ Lugar confirmado</span>
+                  <td style="padding:40px 48px 0; text-align:center;">
+                    <div style="color:#a98a8f; font-size:11px; letter-spacing:4px; text-transform:uppercase; font-family:'Helvetica Neue', Arial, sans-serif; margin-bottom:18px;">Reserva confirmada</div>
+                    <h1 style="margin:0; color:#4a1220; font-size:34px; line-height:1.25; font-weight:normal; font-family:Georgia, serif;">Tu lugar<br>está reservado</h1>
                   </td>
                 </tr>
 
-                <!-- Content -->
+                <!-- Body copy -->
                 <tr>
-                  <td style="padding:16px 40px 8px;">
-                    <p style="margin:0 0 18px; color:#1a1012; font-size:20px; font-weight:600;">Hola ${name || 'que alegría tenerte'},</p>
-                    <p style="margin:0 0 22px; color:#5a4a4d; font-size:15px; line-height:1.7;">
-                      Nos encanta contarte que tu lugar quedó <strong style="color:#660e1b;">confirmado</strong>. Queremos invitarte formalmente a
-                      <strong style="color:#660e1b;">${opts.eventTitle}</strong>. Va a ser una experiencia pensada con muchísimo cariño para vos.
+                  <td style="padding:30px 56px 0;">
+                    <p style="margin:0 0 20px; color:#3a2c2e; font-size:16px; line-height:1.8; font-family:Georgia, serif;">
+                      ${name || 'Hola'}, es un placer confirmártelo: ¡Tu lugar ya está reservado!
+                    </p>
+                    <p style="margin:0 0 20px; color:#5a4a4d; font-size:16px; line-height:1.8; font-family:Georgia, serif;">
+                      A partir de ahora, todo lo que sigue lo estamos preparando con muchísimo cuidado para que sea una experiencia a tu altura.
+                    </p>
+                    <p style="margin:0; color:#5a4a4d; font-size:16px; line-height:1.8; font-family:Georgia, serif;">
+                      Guardá esta fecha. ¡Te esperamos!
                     </p>
                   </td>
                 </tr>
 
-                <!-- Event card -->
-                <tr>
-                  <td style="padding:0 40px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fdf5f6; border:1px solid #f3dfe3; border-radius:12px; padding:22px 24px;">
-                      <tr>
-                        <td>
-                          <p style="margin:0 0 12px; color:#660e1b; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Tu invitación</p>
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                            ${horarioBlock}
-                            ${detailsBlock}
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
+                ${detailsCard}
 
                 <!-- Closing -->
                 <tr>
-                  <td style="padding:26px 40px 8px;">
-                    <p style="margin:0 0 20px; color:#5a4a4d; font-size:15px; line-height:1.7;">
-                      Te pedimos llegar unos minutos antes de tu horario para acreditarte. Si necesitás avisarnos algo, respondé este mail y te ayudamos.
+                  <td style="padding:34px 56px 0;">
+                    <p style="margin:0 0 24px; color:#5a4a4d; font-size:15px; line-height:1.8; font-family:Georgia, serif;">
+                      Te pedimos llegar unos minutos antes para acreditarte con calma. Si necesitás contarnos algo, respondé este mismo correo y te acompañamos.
                     </p>
-                    <p style="margin:0; color:#1a1012; font-size:15px; line-height:1.7;">
-                      ¡Te esperamos!<br>
-                      <strong style="color:#660e1b;">El equipo de Mery García</strong>
+                    <p style="margin:0; color:#3a2c2e; font-size:16px; line-height:1.8; font-family:Georgia, serif;">
+                      Nos vemos muy pronto,<br>
+                      <span style="color:#4a1220; font-style:italic;">Mery García &amp; equipo</span>
                     </p>
                   </td>
                 </tr>
 
-                <!-- Divider -->
-                <tr><td style="padding:28px 40px 0;"><div style="height:1px; background-color:#f0e4e6;"></div></td></tr>
-
                 <!-- Footer -->
                 <tr>
-                  <td style="padding:22px 40px 34px; text-align:center;">
-                    <p style="margin:0; color:#b39aa0; font-size:12px; line-height:1.7;">
+                  <td style="padding:56px 40px 48px; text-align:center;">
+                    <p style="margin:0; color:#c0a9ad; font-size:11px; line-height:1.8; font-family:'Helvetica Neue', Arial, sans-serif; letter-spacing:0.3px;">
                       Recibís este correo porque completaste el formulario de reserva.<br>
-                      © ${new Date().getFullYear()} Mery García. Todos los derechos reservados.
+                      © ${new Date().getFullYear()} Mery García · Todos los derechos reservados.
                     </p>
                   </td>
                 </tr>
