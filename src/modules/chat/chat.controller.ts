@@ -20,7 +20,13 @@ import { UserRole } from '../../shared/types';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatEmailService } from './chat-email.service';
-import { ListAdminRoomsDto, ListMessagesDto, SendMessageDto } from './dto';
+import {
+  AddTokensDto,
+  ListAdminRoomsDto,
+  ListMessagesDto,
+  ResetTokensDto,
+  SendMessageDto,
+} from './dto';
 import { ChatRoomStatus } from '@prisma/client';
 
 @ApiTags('chat')
@@ -48,7 +54,7 @@ export class ChatController {
   ) {
     const room = await this.chat.ensureRoom(user.sub, categoryId);
     const computed = await this.chat.computeStatus(user.sub, categoryId);
-    return { room, computed };
+    return { room: await this.chat.serializeRoomAsync(room), computed };
   }
 
   @Get('unread-count')
@@ -125,5 +131,54 @@ export class ChatController {
       search: q.search,
       status: q.status as ChatRoomStatus | undefined,
     });
+  }
+
+  // --------------------- Tokens (admin) ---------------------
+
+  @Post('admin/rooms/:id/tokens')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async addTokens(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: AddTokensDto,
+  ) {
+    const result = await this.chat.addTokens({
+      roomId: id,
+      adminId: user.sub,
+      adminRole: user.role,
+      amount: dto.amount,
+      reason: dto.reason,
+    });
+    if (result.changed) this.gateway.broadcastTokensChanged(result.room);
+    return result;
+  }
+
+  @Post('admin/rooms/:id/tokens/reset')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async resetTokens(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ResetTokensDto,
+  ) {
+    const result = await this.chat.resetTokens({
+      roomId: id,
+      adminId: user.sub,
+      adminRole: user.role,
+      reason: dto.reason,
+    });
+    if (result.changed) this.gateway.broadcastTokensChanged(result.room);
+    return result;
+  }
+
+  @Get('admin/rooms/:id/tokens')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async tokenHistory(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.chat.listTokenEvents(id, user.sub, user.role);
   }
 }

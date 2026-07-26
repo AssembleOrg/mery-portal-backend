@@ -10,6 +10,7 @@ import { PrismaService } from '../../shared/services';
 import { UserRole } from '../../shared/types';
 import { StorageService } from '../storage/storage.service';
 import { isQuizRequiredForSlug } from '../quiz/quiz-definitions';
+import { SettingsService } from '../settings/settings.service';
 
 export const MIN_VIDEO_PROGRESS_PERCENT = 95;
 export const GRACE_DAYS_AFTER_EXPIRATION = 90;
@@ -33,7 +34,13 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** Límite de tokens configurable desde el panel admin (setting chat.tokenLimit). */
+  async getTokenLimit(): Promise<number> {
+    return this.settings.getChatTokenLimit();
+  }
 
   // --------------------------------------------------------------------------
   // Elegibilidad y transiciones de estado
@@ -230,13 +237,39 @@ export class ChatService {
     return room;
   }
 
-  canWrite(room: RoomWithRelations, role: UserRole): boolean {
+  /** true si la sala llegó al límite de tokens (alumno sin derecho a escribir). */
+  isTokenBlocked(room: { tokens: number }, tokenLimit: number): boolean {
+    return room.tokens >= tokenLimit;
+  }
+
+  canWrite(
+    room: RoomWithRelations,
+    role: UserRole,
+    tokenLimit: number,
+  ): boolean {
     if (room.status === ChatRoomStatus.CLOSED) return false;
     if (room.status === ChatRoomStatus.LOCKED) {
       // El alumno no puede escribir en LOCKED. Admin sí, para no quedar colgado.
       return this.isAdminRole(role);
     }
+    // Tokens: solo frenan al alumno. El admin siempre puede seguir escribiendo.
+    if (!this.isAdminRole(role) && this.isTokenBlocked(room, tokenLimit)) {
+      return false;
+    }
     return true; // ACTIVE y GRACE
+  }
+
+  private writeBlockedMessage(
+    room: RoomWithRelations,
+    tokenLimit: number,
+  ): string {
+    if (room.status === ChatRoomStatus.CLOSED) {
+      return 'Esta conversación está cerrada (solo lectura).';
+    }
+    if (this.isTokenBlocked(room, tokenLimit)) {
+      return `Alcanzaste el límite de ${tokenLimit} consultas marcadas en este curso. Ya no podés escribir en este chat.`;
+    }
+    return 'Todavía no desbloqueaste el chat. Completá los videos del curso.';
   }
 
   // --------------------------------------------------------------------------
@@ -254,16 +287,19 @@ export class ChatService {
       purchases.map((p) => this.ensureRoom(userId, p.categoryId)),
     );
 
-    const unreadCounts = await this.getUnreadCountsForRooms(
-      rooms.map((r) => r.id),
-      userId,
-      UserRole.USER,
-    );
+    const [unreadCounts, tokenLimit] = await Promise.all([
+      this.getUnreadCountsForRooms(
+        rooms.map((r) => r.id),
+        userId,
+        UserRole.USER,
+      ),
+      this.getTokenLimit(),
+    ]);
 
     return rooms
       .filter((r) => r.status !== ChatRoomStatus.CLOSED || r.lastMessageAt) // CLOSED vacías se ocultan
       .map((r) => ({
-        ...this.serializeRoom(r),
+        ...this.serializeRoom(r, tokenLimit),
         unread: unreadCounts.get(r.id) ?? 0,
       }));
   }
@@ -338,14 +374,17 @@ export class ChatService {
       },
     });
 
-    const unreadCounts = await this.getUnreadCountsForRooms(
-      rooms.map((r) => r.id),
-      '',
-      UserRole.ADMIN,
-    );
+    const [unreadCounts, tokenLimit] = await Promise.all([
+      this.getUnreadCountsForRooms(
+        rooms.map((r) => r.id),
+        '',
+        UserRole.ADMIN,
+      ),
+      this.getTokenLimit(),
+    ]);
 
     return rooms.map((r) => ({
-      ...this.serializeRoom(r),
+      ...this.serializeRoom(r, tokenLimit),
       lastMessage: r.messages[0] ?? null,
       unread: unreadCounts.get(r.id) ?? 0,
     }));
@@ -420,12 +459,9 @@ export class ChatService {
     }
 
     const room = await this.assertAccess(roomId, senderId, senderRole);
-    if (!this.canWrite(room, senderRole)) {
-      throw new ForbiddenException(
-        room.status === ChatRoomStatus.CLOSED
-          ? 'Esta conversación está cerrada (solo lectura).'
-          : 'Todavía no desbloqueaste el chat. Completá los videos del curso.',
-      );
+    const tokenLimit = await this.getTokenLimit();
+    if (!this.canWrite(room, senderRole, tokenLimit)) {
+      throw new ForbiddenException(this.writeBlockedMessage(room, tokenLimit));
     }
 
     const type: ChatMessageType = hasImage && !hasText ? ChatMessageType.IMAGE : ChatMessageType.TEXT;
@@ -530,7 +566,7 @@ export class ChatService {
     return result;
   }
 
-  private serializeRoom(r: RoomWithRelations) {
+  private serializeRoom(r: RoomWithRelations, tokenLimit: number) {
     return {
       id: r.id,
       status: r.status,
@@ -538,11 +574,134 @@ export class ChatService {
       gracePeriodEnd: r.gracePeriodEnd,
       lastMessageAt: r.lastMessageAt,
       studentInitiated: r.studentInitiated,
+      tokens: r.tokens,
+      tokenLimit,
+      tokensBlocked: this.isTokenBlocked(r, tokenLimit),
+      tokensBlockedAt: r.tokensBlockedAt,
       category: r.category,
       user: r.user,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };
+  }
+
+  /** Igual que serializeRoom pero resolviendo el límite por su cuenta. */
+  async serializeRoomAsync(r: RoomWithRelations) {
+    return this.serializeRoom(r, await this.getTokenLimit());
+  }
+
+  // --------------------------------------------------------------------------
+  // Tokens (strikes marcados por el admin)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Suma (o resta, con amount negativo) tokens a una sala. El balance queda
+   * acotado entre 0 y el límite configurado. Al alcanzar el límite el alumno
+   * deja de poder escribir; si el admin baja el balance, se desbloquea.
+   */
+  async addTokens(params: {
+    roomId: string;
+    adminId: string;
+    adminRole: UserRole;
+    amount: number;
+    reason?: string;
+  }) {
+    const { roomId, adminId, adminRole, amount, reason } = params;
+    if (!this.isAdminRole(adminRole)) {
+      throw new ForbiddenException('Solo un administrador puede marcar tokens');
+    }
+    if (!Number.isInteger(amount) || amount === 0) {
+      throw new BadRequestException('La cantidad de tokens debe ser un entero distinto de 0');
+    }
+
+    const room = await this.assertAccess(roomId, adminId, adminRole);
+    const tokenLimit = await this.getTokenLimit();
+
+    const next = Math.max(0, Math.min(tokenLimit, room.tokens + amount));
+    if (next === room.tokens) {
+      // Ya estaba en el piso o en el techo: no registro un evento vacío.
+      return {
+        room: this.serializeRoom(room, tokenLimit),
+        event: null,
+        changed: false,
+      };
+    }
+
+    const wasBlocked = this.isTokenBlocked(room, tokenLimit);
+    const isBlocked = next >= tokenLimit;
+
+    const [updated, event] = await this.prisma.$transaction([
+      this.prisma.chatRoom.update({
+        where: { id: roomId },
+        data: {
+          tokens: next,
+          tokensBlockedAt: isBlocked
+            ? (wasBlocked ? room.tokensBlockedAt : new Date())
+            : null,
+        },
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true } },
+          category: { select: { id: true, name: true, slug: true, image: true } },
+        },
+      }),
+      this.prisma.chatTokenEvent.create({
+        data: {
+          roomId,
+          adminId,
+          amount: next - room.tokens,
+          balanceAfter: next,
+          reason: reason?.trim() || null,
+        },
+      }),
+    ]);
+
+    return {
+      room: this.serializeRoom(updated, tokenLimit),
+      event,
+      changed: true,
+      blockedNow: isBlocked && !wasBlocked,
+      unblockedNow: !isBlocked && wasBlocked,
+    };
+  }
+
+  /** Vuelve el contador a 0 y desbloquea al alumno. */
+  async resetTokens(params: {
+    roomId: string;
+    adminId: string;
+    adminRole: UserRole;
+    reason?: string;
+  }) {
+    const { roomId, adminId, adminRole, reason } = params;
+    const room = await this.assertAccess(roomId, adminId, adminRole);
+    if (!this.isAdminRole(adminRole)) {
+      throw new ForbiddenException('Solo un administrador puede resetear tokens');
+    }
+    if (room.tokens === 0) {
+      const tokenLimit = await this.getTokenLimit();
+      return { room: this.serializeRoom(room, tokenLimit), event: null, changed: false };
+    }
+    return this.addTokens({
+      roomId,
+      adminId,
+      adminRole,
+      amount: -room.tokens,
+      reason: reason ?? 'Reset de tokens',
+    });
+  }
+
+  async listTokenEvents(roomId: string, userId: string, role: UserRole) {
+    await this.assertAccess(roomId, userId, role);
+    if (!this.isAdminRole(role)) {
+      throw new ForbiddenException('Historial disponible solo para administradores');
+    }
+    return this.prisma.chatTokenEvent.findMany({
+      where: { roomId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        admin: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -569,8 +728,9 @@ export class ChatService {
     file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
   ) {
     const room = await this.assertAccess(roomId, userId, role);
-    if (!this.canWrite(room, role)) {
-      throw new ForbiddenException('No podés adjuntar imágenes en esta sala');
+    const tokenLimit = await this.getTokenLimit();
+    if (!this.canWrite(room, role, tokenLimit)) {
+      throw new ForbiddenException(this.writeBlockedMessage(room, tokenLimit));
     }
     if (!file || !file.buffer) {
       throw new BadRequestException('Archivo inválido');

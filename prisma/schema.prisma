@@ -47,6 +47,7 @@ model User {
   chatRooms         ChatRoom[]
   chatMessages     ChatMessage[]
   quizAttempts      QuizAttempt[]
+  chatTokenEvents   ChatTokenEvent[] @relation("ChatTokenEventAdmin")
   
   // Audit fields
   createdAt DateTime @default(now())
@@ -404,7 +405,14 @@ model ChatRoom {
   lastStudentReadAt DateTime?
   lastAdminReadAt   DateTime?
 
+  // Tokens (strikes) que el admin marca manualmente. Al alcanzar el límite
+  // configurable (setting "chat.tokenLimit", default 3) el alumno deja de
+  // poder escribir en esta sala. El admin puede restar o resetear.
+  tokens           Int             @default(0)
+  tokensBlockedAt  DateTime?       // momento en que alcanzó el límite (null = no bloqueado)
+
   messages         ChatMessage[]
+  tokenEvents      ChatTokenEvent[]
 
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -415,8 +423,40 @@ model ChatRoom {
   @@map("chat_rooms")
 }
 
+/// Historial de tokens marcados por el admin en una sala de chat.
+model ChatTokenEvent {
+  id           String   @id @default(cuid())
+  roomId       String
+  room         ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  adminId      String
+  admin        User     @relation("ChatTokenEventAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+
+  amount       Int      // delta aplicado (+1, +3, -1…). 0 no se registra.
+  balanceAfter Int      // tokens de la sala luego del movimiento
+  reason       String?  @db.Text
+
+  createdAt    DateTime @default(now())
+
+  @@index([roomId, createdAt])
+  @@map("chat_token_events")
+}
+
 // ============================================================================
-// QUIZ (examen final por categoría — gate del chat para cursos de cejas)
+// CONFIGURACIÓN (key/value editable desde el panel admin)
+// ============================================================================
+
+model AppSetting {
+  key         String   @id
+  value       String   @db.Text
+  description String?  @db.Text
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  @@map("app_settings")
+}
+
+// ============================================================================
+// QUIZ (examen final — mismo examen para todos los cursos, gate del chat)
 // ============================================================================
 
 model QuizAttempt {
