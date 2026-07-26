@@ -13,12 +13,17 @@ export interface QuizStatus {
   required: boolean;
   passed: boolean;
   canAttempt: boolean;
+  /** Solo se usa si algún día se vuelve a activar el cooldown entre intentos. */
   nextAttemptAt: string | null;
+  attempts: number;
+  /**
+   * Último intento. NO incluye qué preguntas estuvieron mal: al alumno solo se
+   * le dice cuántas acertó y se le recomienda volver a ver el curso.
+   */
   lastAttempt: {
     passed: boolean;
     correctCount: number;
     totalQuestions: number;
-    wrongQuestionIds: string[];
     createdAt: string;
   } | null;
 }
@@ -48,7 +53,9 @@ export class QuizService {
     }
   }
 
-  private nextAttemptAt(def: QuizDefinition, lastAttemptAt: Date): Date {
+  /** null si no hay cooldown configurado (reintento libre). */
+  private nextAttemptAt(def: QuizDefinition, lastAttemptAt: Date): Date | null {
+    if (def.cooldownHours <= 0) return null;
     const next = new Date(lastAttemptAt);
     next.setHours(next.getHours() + def.cooldownHours);
     return next;
@@ -69,29 +76,24 @@ export class QuizService {
   async getStatus(userId: string, categoryId: string): Promise<QuizStatus> {
     const category = await this.resolveCategory(categoryId);
     const def = getQuizForSlug(category.slug);
-    if (!def) {
-      return {
-        required: false,
-        passed: false,
-        canAttempt: false,
-        nextAttemptAt: null,
-        lastAttempt: null,
-      };
-    }
 
-    const last = await this.prisma.quizAttempt.findFirst({
-      where: { userId, categoryId },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [last, attempts] = await Promise.all([
+      this.prisma.quizAttempt.findFirst({
+        where: { userId, categoryId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.quizAttempt.count({ where: { userId, categoryId } }),
+    ]);
     const passed = last?.passed
       ? true
       : await this.hasPassed(userId, categoryId);
 
+    // Sin cooldown puede reintentar siempre que no haya aprobado todavía.
     let canAttempt = !passed;
     let nextAttemptAt: string | null = null;
     if (!passed && last) {
       const next = this.nextAttemptAt(def, last.createdAt);
-      if (next > new Date()) {
+      if (next && next > new Date()) {
         canAttempt = false;
         nextAttemptAt = next.toISOString();
       }
@@ -102,12 +104,12 @@ export class QuizService {
       passed,
       canAttempt,
       nextAttemptAt,
+      attempts,
       lastAttempt: last
         ? {
             passed: last.passed,
             correctCount: last.correctCount,
             totalQuestions: last.totalQuestions,
-            wrongQuestionIds: (last.wrongQuestionIds as string[]) ?? [],
             createdAt: last.createdAt.toISOString(),
           }
         : null,
@@ -120,12 +122,10 @@ export class QuizService {
   async getQuestions(userId: string, categoryId: string, role: UserRole) {
     const category = await this.resolveCategory(categoryId);
     const def = getQuizForSlug(category.slug);
-    if (!def) {
-      return { required: false as const, questions: [], status: await this.getStatus(userId, categoryId) };
-    }
     await this.assertPurchase(userId, categoryId, role);
     return {
       required: true as const,
+      maxWrong: def.maxWrong,
       questions: def.questions.map((q) => ({ id: q.id, text: q.text })),
       status: await this.getStatus(userId, categoryId),
     };
@@ -139,16 +139,13 @@ export class QuizService {
   ) {
     const category = await this.resolveCategory(categoryId);
     const def = getQuizForSlug(category.slug);
-    if (!def) {
-      throw new BadRequestException('Este curso no tiene examen final');
-    }
     await this.assertPurchase(userId, categoryId, role);
 
     if (await this.hasPassed(userId, categoryId)) {
       throw new BadRequestException('Ya aprobaste este examen');
     }
 
-    // Cooldown de 24h desde el último intento fallido
+    // Cooldown entre intentos (deshabilitado mientras cooldownHours sea 0)
     const last = await this.prisma.quizAttempt.findFirst({
       where: { userId, categoryId },
       orderBy: { createdAt: 'desc' },
@@ -156,7 +153,7 @@ export class QuizService {
     });
     if (last) {
       const next = this.nextAttemptAt(def, last.createdAt);
-      if (next > new Date()) {
+      if (next && next > new Date()) {
         throw new BadRequestException(
           `Podés volver a intentarlo a partir de ${next.toISOString()}`,
         );
@@ -183,6 +180,7 @@ export class QuizService {
         userId,
         categoryId,
         answers: answers as Prisma.InputJsonValue,
+        // Se guardan para análisis interno, pero NUNCA se devuelven al alumno.
         wrongQuestionIds: wrongQuestionIds as Prisma.InputJsonValue,
         correctCount,
         totalQuestions,
@@ -194,10 +192,12 @@ export class QuizService {
       passed,
       correctCount,
       totalQuestions,
-      wrongQuestionIds,
+      maxWrong: def.maxWrong,
+      // Reintento libre: el alumno puede volver a ver el curso y rendir de nuevo.
+      canRetry: !passed,
       nextAttemptAt: passed
         ? null
-        : this.nextAttemptAt(def, attempt.createdAt).toISOString(),
+        : (this.nextAttemptAt(def, attempt.createdAt)?.toISOString() ?? null),
     };
   }
 }

@@ -1,8 +1,11 @@
 /**
- * Definiciones de exámenes finales por categoría (keyed por slug).
+ * Definición del examen final. Es **uno solo para todos los cursos**: al
+ * terminar cualquier categoría el alumno rinde este mismo examen y recién
+ * ahí se le desbloquea el chat.
  *
  * IMPORTANTE: las respuestas correctas viven SOLO acá (server-side).
- * Al frontend únicamente se le mandan id + texto de cada pregunta.
+ * Al frontend únicamente se le mandan id + texto de cada pregunta, y el
+ * resultado nunca dice qué preguntas estuvieron mal.
  */
 
 export interface QuizQuestionDef {
@@ -15,14 +18,18 @@ export interface QuizQuestionDef {
 export interface QuizDefinition {
   /** Cantidad máxima de respuestas incorrectas para aprobar */
   maxWrong: number;
-  /** Horas de espera entre intentos fallidos */
+  /**
+   * Horas de espera entre intentos fallidos. 0 = puede reintentar cuando
+   * quiera (el alumno puede volver a ver el curso las veces que necesite).
+   */
   cooldownHours: number;
   questions: QuizQuestionDef[];
 }
 
-const ESTILISMO_CEJAS_QUIZ: QuizDefinition = {
-  maxWrong: 1,
-  cooldownHours: 24,
+/** Examen único, común a todos los cursos. */
+export const GLOBAL_QUIZ: QuizDefinition = {
+  maxWrong: 2,
+  cooldownHours: 0,
   questions: [
     {
       id: 'q1',
@@ -77,17 +84,12 @@ const ESTILISMO_CEJAS_QUIZ: QuizDefinition = {
   ],
 };
 
-/** Categorías (por slug) que exigen aprobar el examen para desbloquear el chat */
-const QUIZ_BY_CATEGORY_SLUG: Record<string, QuizDefinition> = {
-  'estilismo-de-cejas': ESTILISMO_CEJAS_QUIZ,
-  'auto-styling-estilismo-de-cejas': ESTILISMO_CEJAS_QUIZ,
-  'brow-essentials-private-sessions': ESTILISMO_CEJAS_QUIZ,
-};
-
-export function getQuizForSlug(slug: string): QuizDefinition | null {
-  return QUIZ_BY_CATEGORY_SLUG[slug] ?? null;
+/** Todos los cursos exigen examen: siempre devuelve el examen global. */
+export function getQuizForSlug(_slug?: string): QuizDefinition {
+  return GLOBAL_QUIZ;
 }
 
-export function isQuizRequiredForSlug(slug: string): boolean {
-  return slug in QUIZ_BY_CATEGORY_SLUG;
+/** Todos los cursos exigen aprobar el examen para desbloquear el chat. */
+export function isQuizRequiredForSlug(_slug?: string): boolean {
+  return true;
 }

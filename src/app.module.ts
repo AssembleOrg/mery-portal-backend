@@ -20,6 +20,8 @@ import { ProblemReportModule } from './modules/problemReport';
 import { ChatModule } from './modules/chat';
 import { QuizModule } from './modules/quiz';
 import { FormsModule } from './modules/forms';
+import { SettingsModule } from './modules/settings';
+import { PublicCatalogModule } from './modules/public-catalog';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
 import { ResponseInterceptor, LoggingInterceptor } from './shared/interceptors';
@@ -65,6 +67,8 @@ import { SuspiciousActivityGuard } from './shared/guards';
     ChatModule,
     QuizModule,
     FormsModule,
+    SettingsModule,
+    PublicCatalogModule,
   ],
   controllers: [AppController],
   providers: [

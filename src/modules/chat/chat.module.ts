@@ -7,10 +7,12 @@ import { ChatGateway } from './chat.gateway';
 import { ChatEmailService } from './chat-email.service';
 import { PrismaService } from '../../shared/services';
 import { StorageModule } from '../storage/storage.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
   imports: [
     StorageModule,
+    SettingsModule,
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
