@@ -5,6 +5,8 @@ import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatEmailService } from './chat-email.service';
+import { QuickRepliesService } from './quick-replies.service';
+import { TranscriptionService } from './transcription.service';
 import { PrismaService } from '../../shared/services';
 import { StorageModule } from '../storage/storage.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -23,7 +25,14 @@ import { SettingsModule } from '../settings/settings.module';
     }),
   ],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway, ChatEmailService, PrismaService],
+  providers: [
+    ChatService,
+    ChatGateway,
+    ChatEmailService,
+    QuickRepliesService,
+    TranscriptionService,
+    PrismaService,
+  ],
   exports: [ChatService, ChatGateway],
 })
 export class ChatModule {}

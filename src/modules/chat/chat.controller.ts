@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -20,12 +22,17 @@ import { UserRole } from '../../shared/types';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatEmailService } from './chat-email.service';
+import { QuickRepliesService } from './quick-replies.service';
+import { TranscriptionService } from './transcription.service';
 import {
   AddTokensDto,
+  CreateQuickReplyDto,
   ListAdminRoomsDto,
   ListMessagesDto,
+  ListQuickRepliesDto,
   ResetTokensDto,
   SendMessageDto,
+  UpdateQuickReplyDto,
 } from './dto';
 import { ChatRoomStatus } from '@prisma/client';
 
@@ -38,6 +45,8 @@ export class ChatController {
     private readonly chat: ChatService,
     private readonly gateway: ChatGateway,
     private readonly email: ChatEmailService,
+    private readonly quickReplies: QuickRepliesService,
+    private readonly transcription: TranscriptionService,
   ) {}
 
   // --------------------- Alumno ---------------------
@@ -180,5 +189,57 @@ export class ChatController {
     @Param('id') id: string,
   ) {
     return this.chat.listTokenEvents(id, user.sub, user.role);
+  }
+
+  // --------------------- Transcripción de audio (admin) ---------------------
+
+  @Post('transcribe')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  async transcribe(
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addMaxSizeValidator({ maxSize: 25 * 1024 * 1024 })
+        .build({ errorHttpStatusCode: HttpStatus.BAD_REQUEST }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const text = await this.transcription.transcribe(file);
+    return { text };
+  }
+
+  // --------------------- Respuestas rápidas (admin) ---------------------
+
+  @Get('admin/quick-replies')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async listQuickReplies(@Query() q: ListQuickRepliesDto) {
+    return this.quickReplies.list(q.search);
+  }
+
+  @Post('admin/quick-replies')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async createQuickReply(@Body() dto: CreateQuickReplyDto) {
+    return this.quickReplies.create(dto);
+  }
+
+  @Patch('admin/quick-replies/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async updateQuickReply(
+    @Param('id') id: string,
+    @Body() dto: UpdateQuickReplyDto,
+  ) {
+    return this.quickReplies.update(id, dto);
+  }
+
+  @Delete('admin/quick-replies/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  async deleteQuickReply(@Param('id') id: string) {
+    return this.quickReplies.remove(id);
   }
 }

@@ -455,6 +455,20 @@ model AppSetting {
   @@map("app_settings")
 }
 
+/// Respuestas rápidas reutilizables que el admin inserta en el chat de un alumno.
+/// Son globales (compartidas por todos los admins/subadmins).
+model ChatQuickReply {
+  id        String   @id @default(cuid())
+  title     String
+  body      String   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([title])
+  @@map("chat_quick_replies")
+}
+
 // ============================================================================
 // QUIZ (examen final — mismo examen para todos los cursos, gate del chat)
 // ============================================================================
