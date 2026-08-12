@@ -18,18 +18,18 @@ export interface SettingDefinition {
   max?: number;
 }
 
-export const CHAT_TOKEN_LIMIT_KEY = 'chat.tokenLimit';
+export const CHAT_LIFETIME_DAYS_KEY = 'chat.lifetimeDays';
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
-    key: CHAT_TOKEN_LIMIT_KEY,
-    label: 'Tokens para bloquear el chat',
+    key: CHAT_LIFETIME_DAYS_KEY,
+    label: 'Días de vida del chat',
     description:
-      'Cantidad de tokens que el admin debe marcar en una conversación para que el alumno deje de poder escribir en ella.',
+      'Días que un chat permanece abierto desde que se desbloquea. Al vencer queda solo lectura. El admin puede extenderlo, y comprar otra formación lo reabre.',
     type: 'int',
-    defaultValue: '3',
+    defaultValue: '30',
     min: 1,
-    max: 50,
+    max: 3650,
   },
 ];
 

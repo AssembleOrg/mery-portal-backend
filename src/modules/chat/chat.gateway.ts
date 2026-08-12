@@ -234,23 +234,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Avisa a la sala (alumno + admins abiertos en ella) que cambió el contador
    * de tokens, para que la UI se actualice sin refrescar.
    */
-  broadcastTokensChanged(room: {
+  broadcastRoomUpdated(room: {
     id: string;
-    tokens: number;
-    tokenLimit: number;
-    tokensBlocked: boolean;
+    status: string;
+    blocked: boolean;
+    blockedAt: Date | null;
+    expiresAt: Date | null;
     user: { id: string };
   }) {
     if (!this.server) return;
     const payload = {
       roomId: room.id,
-      tokens: room.tokens,
-      tokenLimit: room.tokenLimit,
-      tokensBlocked: room.tokensBlocked,
+      status: room.status,
+      blocked: room.blocked,
+      blockedAt: room.blockedAt,
+      expiresAt: room.expiresAt,
     };
-    this.server.to(`room:${room.id}`).emit('tokens_changed', payload);
-    this.server.to(`user:${room.user.id}`).emit('tokens_changed', payload);
-    this.server.to('admins').emit('tokens_changed', payload);
+    this.server.to(`room:${room.id}`).emit('room_updated', payload);
+    this.server.to(`user:${room.user.id}`).emit('room_updated', payload);
+    this.server.to('admins').emit('room_updated', payload);
   }
 
   broadcastRoomStatusChanged(roomId: string, status: string) {

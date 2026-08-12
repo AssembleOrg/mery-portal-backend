@@ -25,12 +25,11 @@ import { ChatEmailService } from './chat-email.service';
 import { QuickRepliesService } from './quick-replies.service';
 import { TranscriptionService } from './transcription.service';
 import {
-  AddTokensDto,
   CreateQuickReplyDto,
+  ExtendRoomDto,
   ListAdminRoomsDto,
   ListMessagesDto,
   ListQuickRepliesDto,
-  ResetTokensDto,
   SendMessageDto,
   UpdateQuickReplyDto,
 } from './dto';
@@ -142,53 +141,58 @@ export class ChatController {
     });
   }
 
-  // --------------------- Tokens (admin) ---------------------
+  // --------------------- Bloqueo + vida del chat (admin) ---------------------
 
-  @Post('admin/rooms/:id/tokens')
+  @Post('admin/rooms/:id/block')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
-  async addTokens(
+  async blockRoom(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() dto: AddTokensDto,
   ) {
-    const result = await this.chat.addTokens({
+    const result = await this.chat.setBlocked({
       roomId: id,
       adminId: user.sub,
       adminRole: user.role,
-      amount: dto.amount,
-      reason: dto.reason,
+      blocked: true,
     });
-    if (result.changed) this.gateway.broadcastTokensChanged(result.room);
+    if (result.changed) this.gateway.broadcastRoomUpdated(result.room);
     return result;
   }
 
-  @Post('admin/rooms/:id/tokens/reset')
+  @Post('admin/rooms/:id/unblock')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
-  async resetTokens(
+  async unblockRoom(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() dto: ResetTokensDto,
   ) {
-    const result = await this.chat.resetTokens({
+    const result = await this.chat.setBlocked({
       roomId: id,
       adminId: user.sub,
       adminRole: user.role,
-      reason: dto.reason,
+      blocked: false,
     });
-    if (result.changed) this.gateway.broadcastTokensChanged(result.room);
+    if (result.changed) this.gateway.broadcastRoomUpdated(result.room);
     return result;
   }
 
-  @Get('admin/rooms/:id/tokens')
+  @Post('admin/rooms/:id/extend')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
-  async tokenHistory(
+  async extendRoom(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
+    @Body() dto: ExtendRoomDto,
   ) {
-    return this.chat.listTokenEvents(id, user.sub, user.role);
+    const result = await this.chat.extendRoom({
+      roomId: id,
+      adminId: user.sub,
+      adminRole: user.role,
+      days: dto.days,
+    });
+    if (result.changed) this.gateway.broadcastRoomUpdated(result.room);
+    return result;
   }
 
   // --------------------- Transcripción de audio (admin) ---------------------

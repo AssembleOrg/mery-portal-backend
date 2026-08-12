@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../shared/services';
 import { WebhookNotificationDto, MercadoPagoPaymentDto } from './dto';
 import { CartService } from '../cart/cart.service';
+import { ChatService } from '../chat/chat.service';
 
 @Injectable()
 export class MercadoPagoService {
@@ -20,6 +21,7 @@ export class MercadoPagoService {
     private configService: ConfigService,
     private prisma: PrismaService,
     private cartService: CartService,
+    private chatService: ChatService,
   ) {
     this.accessToken = this.configService.get<string>('MP_ACCESS_TOKEN') || '';
     this.webhookSecret = this.configService.get<string>('MP_WEBHOOK_SECRET') || '';
@@ -299,6 +301,16 @@ export class MercadoPagoService {
       } catch (cartError) {
         // Don't fail the entire process if cart clearing fails
         this.logger.warn(`⚠️ Error vaciando carrito: ${cartError.message}`);
+      }
+
+      // Comprar otra formación reabre/extiende la vida de los chats del alumno.
+      try {
+        const { reopened } = await this.chatService.reopenRoomsForUser(userId);
+        if (reopened > 0) {
+          this.logger.log(`💬 ${reopened} chat(s) reabiertos para ${userId}`);
+        }
+      } catch (chatError) {
+        this.logger.warn(`⚠️ Error reabriendo chats: ${chatError.message}`);
       }
 
     } catch (error) {

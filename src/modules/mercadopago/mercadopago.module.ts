@@ -4,9 +4,10 @@ import { MercadoPagoController, WebhookAliasController } from './mercadopago.con
 import { MercadoPagoService } from './mercadopago.service';
 import { PrismaService } from '../../shared/services';
 import { CartModule } from '../cart/cart.module';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
-  imports: [ConfigModule, CartModule],
+  imports: [ConfigModule, CartModule, ChatModule],
   controllers: [MercadoPagoController, WebhookAliasController],
   providers: [MercadoPagoService, PrismaService],
   exports: [MercadoPagoService],

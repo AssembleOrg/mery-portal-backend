@@ -37,9 +37,17 @@ export class ChatService {
     private readonly settings: SettingsService,
   ) {}
 
-  /** Límite de tokens configurable desde el panel admin (setting chat.tokenLimit). */
-  async getTokenLimit(): Promise<number> {
-    return this.settings.getChatTokenLimit();
+  /** Días de vida del chat, configurable desde el panel admin (chat.lifetimeDays). */
+  async getLifetimeDays(): Promise<number> {
+    return this.settings.getChatLifetimeDays();
+  }
+
+  /** Fecha de vencimiento del chat = base + días de vida configurados. */
+  private async computeExpiry(from: Date): Promise<Date> {
+    const days = await this.getLifetimeDays();
+    const end = new Date(from);
+    end.setDate(end.getDate() + days);
+    return end;
   }
 
   // --------------------------------------------------------------------------
@@ -113,32 +121,16 @@ export class ChatService {
       };
     }
 
-    // Compra con fecha de expiración ya cumplida → GRACE o CLOSED
-    if (purchase.expiresAt && purchase.expiresAt < now) {
-      const graceEnd = new Date(purchase.expiresAt);
-      graceEnd.setDate(graceEnd.getDate() + GRACE_DAYS_AFTER_EXPIRATION);
-      const status =
-        now < graceEnd ? ChatRoomStatus.GRACE : ChatRoomStatus.CLOSED;
-      return {
-        status,
-        gracePeriodEnd: graceEnd,
-        progressPercent,
-        videosTotal,
-        videosCompleted,
-        purchaseActive: purchase.isActive,
-        quizRequired,
-        quizPassed,
-      };
-    }
-
-    // Compra activa + 95% progreso en todos los videos + examen aprobado
-    // (si la categoría lo exige) → ACTIVE, sino LOCKED
-    const unlocked =
+    // Gate de apertura: 95% de progreso en todos los videos + examen aprobado
+    // (si la categoría lo exige). El vencimiento por vida del chat (30 días) lo
+    // resuelve ensureRoom usando la fecha real de desbloqueo (unlockedAt) de la
+    // sala, no la expiración de la compra.
+    const gateMet =
       videosTotal > 0 &&
       videosCompleted === videosTotal &&
       (!quizRequired || quizPassed);
     return {
-      status: unlocked ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
+      status: gateMet ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
       gracePeriodEnd: null,
       progressPercent,
       videosTotal,
@@ -150,11 +142,51 @@ export class ChatService {
   }
 
   /**
+   * Aplica la vida del chat sobre el gate. Recibe la sala y el resultado del
+   * gate (computeStatus) y decide el estado final:
+   *  - Nunca desbloqueada + gate no cumplido → LOCKED (sin expiración).
+   *  - Se cumple el gate por primera vez → se desbloquea: unlockedAt=now y
+   *    expiresAt=now+vida → ACTIVE.
+   *  - Ya desbloqueada → la vida manda: ACTIVE si now < expiresAt, sino CLOSED.
+   *    (Una vez abierta, bajar el progreso no la vuelve a LOCKEAR.)
+   * Devuelve los campos a persistir.
+   */
+  private async resolveLifecycle(
+    room: { unlockedAt: Date | null; expiresAt: Date | null },
+    gateStatus: ChatRoomStatus,
+    now: Date,
+  ): Promise<{
+    status: ChatRoomStatus;
+    unlockedAt: Date | null;
+    expiresAt: Date | null;
+  }> {
+    // Ya estuvo abierta alguna vez.
+    if (room.unlockedAt) {
+      // Backfill de salas viejas sin expiresAt: la calculo desde unlockedAt.
+      const expiresAt =
+        room.expiresAt ?? (await this.computeExpiry(room.unlockedAt));
+      const status =
+        now < expiresAt ? ChatRoomStatus.ACTIVE : ChatRoomStatus.CLOSED;
+      return { status, unlockedAt: room.unlockedAt, expiresAt };
+    }
+    // Nunca se abrió: se abre solo si el gate está cumplido.
+    if (gateStatus === ChatRoomStatus.ACTIVE) {
+      return {
+        status: ChatRoomStatus.ACTIVE,
+        unlockedAt: now,
+        expiresAt: await this.computeExpiry(now),
+      };
+    }
+    return { status: ChatRoomStatus.LOCKED, unlockedAt: null, expiresAt: null };
+  }
+
+  /**
    * Asegura que exista una ChatRoom para (userId, categoryId) y actualiza su status
    * según la situación actual. Se ejecuta cada vez que se accede desde el front.
    */
   async ensureRoom(userId: string, categoryId: string): Promise<RoomWithRelations> {
     const computed = await this.computeStatus(userId, categoryId);
+    const now = new Date();
 
     const existing = await this.prisma.chatRoom.findUnique({
       where: { userId_categoryId: { userId, categoryId } },
@@ -165,46 +197,50 @@ export class ChatService {
     });
 
     if (!existing) {
-      const created = await this.prisma.chatRoom.create({
+      const life = await this.resolveLifecycle(
+        { unlockedAt: null, expiresAt: null },
+        computed.status,
+        now,
+      );
+      return this.prisma.chatRoom.create({
         data: {
           userId,
           categoryId,
-          status: computed.status,
-          unlockedAt: computed.status === ChatRoomStatus.ACTIVE ? new Date() : null,
-          gracePeriodEnd: computed.gracePeriodEnd,
+          status: life.status,
+          unlockedAt: life.unlockedAt,
+          expiresAt: life.expiresAt,
         },
         include: {
           user: { select: { id: true, firstName: true, lastName: true, email: true } },
           category: { select: { id: true, name: true, slug: true, image: true } },
         },
       });
-      return created;
     }
 
-    // Transiciones: solo actualizo si cambió
+    const life = await this.resolveLifecycle(existing, computed.status, now);
+
+    // Transiciones: solo actualizo si cambió algo.
     const needsUpdate =
-      existing.status !== computed.status ||
-      (existing.gracePeriodEnd?.getTime() ?? null) !==
-        (computed.gracePeriodEnd?.getTime() ?? null);
+      existing.status !== life.status ||
+      (existing.unlockedAt?.getTime() ?? null) !==
+        (life.unlockedAt?.getTime() ?? null) ||
+      (existing.expiresAt?.getTime() ?? null) !==
+        (life.expiresAt?.getTime() ?? null);
 
     if (!needsUpdate) return existing;
 
-    const updated = await this.prisma.chatRoom.update({
+    return this.prisma.chatRoom.update({
       where: { id: existing.id },
       data: {
-        status: computed.status,
-        gracePeriodEnd: computed.gracePeriodEnd,
-        unlockedAt:
-          existing.unlockedAt === null && computed.status === ChatRoomStatus.ACTIVE
-            ? new Date()
-            : existing.unlockedAt,
+        status: life.status,
+        unlockedAt: life.unlockedAt,
+        expiresAt: life.expiresAt,
       },
       include: {
         user: { select: { id: true, firstName: true, lastName: true, email: true } },
         category: { select: { id: true, name: true, slug: true, image: true } },
       },
     });
-    return updated;
   }
 
   // --------------------------------------------------------------------------
@@ -237,37 +273,22 @@ export class ChatService {
     return room;
   }
 
-  /** true si la sala llegó al límite de tokens (alumno sin derecho a escribir). */
-  isTokenBlocked(room: { tokens: number }, tokenLimit: number): boolean {
-    return room.tokens >= tokenLimit;
-  }
-
-  canWrite(
-    room: RoomWithRelations,
-    role: UserRole,
-    tokenLimit: number,
-  ): boolean {
+  canWrite(room: RoomWithRelations, role: UserRole): boolean {
+    // El admin siempre puede escribir (para no quedar colgado en ningún estado).
+    if (this.isAdminRole(role)) return true;
     if (room.status === ChatRoomStatus.CLOSED) return false;
-    if (room.status === ChatRoomStatus.LOCKED) {
-      // El alumno no puede escribir en LOCKED. Admin sí, para no quedar colgado.
-      return this.isAdminRole(role);
-    }
-    // Tokens: solo frenan al alumno. El admin siempre puede seguir escribiendo.
-    if (!this.isAdminRole(role) && this.isTokenBlocked(room, tokenLimit)) {
-      return false;
-    }
-    return true; // ACTIVE y GRACE
+    if (room.status === ChatRoomStatus.LOCKED) return false;
+    // ACTIVE: el bloqueo manual del admin frena al alumno.
+    if (room.blocked) return false;
+    return true;
   }
 
-  private writeBlockedMessage(
-    room: RoomWithRelations,
-    tokenLimit: number,
-  ): string {
+  private writeBlockedMessage(room: RoomWithRelations): string {
     if (room.status === ChatRoomStatus.CLOSED) {
       return 'Esta conversación está cerrada (solo lectura).';
     }
-    if (this.isTokenBlocked(room, tokenLimit)) {
-      return `Alcanzaste el límite de ${tokenLimit} consultas marcadas en este curso. Ya no podés escribir en este chat.`;
+    if (room.blocked) {
+      return 'El chat fue bloqueado. Ya no podés enviar mensajes nuevos en esta conversación.';
     }
     return 'Todavía no desbloqueaste el chat. Completá los videos del curso.';
   }
@@ -287,19 +308,16 @@ export class ChatService {
       purchases.map((p) => this.ensureRoom(userId, p.categoryId)),
     );
 
-    const [unreadCounts, tokenLimit] = await Promise.all([
-      this.getUnreadCountsForRooms(
-        rooms.map((r) => r.id),
-        userId,
-        UserRole.USER,
-      ),
-      this.getTokenLimit(),
-    ]);
+    const unreadCounts = await this.getUnreadCountsForRooms(
+      rooms.map((r) => r.id),
+      userId,
+      UserRole.USER,
+    );
 
     return rooms
       .filter((r) => r.status !== ChatRoomStatus.CLOSED || r.lastMessageAt) // CLOSED vacías se ocultan
       .map((r) => ({
-        ...this.serializeRoom(r, tokenLimit),
+        ...this.serializeRoom(r),
         unread: unreadCounts.get(r.id) ?? 0,
       }));
   }
@@ -374,17 +392,14 @@ export class ChatService {
       },
     });
 
-    const [unreadCounts, tokenLimit] = await Promise.all([
-      this.getUnreadCountsForRooms(
-        rooms.map((r) => r.id),
-        '',
-        UserRole.ADMIN,
-      ),
-      this.getTokenLimit(),
-    ]);
+    const unreadCounts = await this.getUnreadCountsForRooms(
+      rooms.map((r) => r.id),
+      '',
+      UserRole.ADMIN,
+    );
 
     return rooms.map((r) => ({
-      ...this.serializeRoom(r, tokenLimit),
+      ...this.serializeRoom(r),
       lastMessage: r.messages[0] ?? null,
       unread: unreadCounts.get(r.id) ?? 0,
     }));
@@ -459,9 +474,8 @@ export class ChatService {
     }
 
     const room = await this.assertAccess(roomId, senderId, senderRole);
-    const tokenLimit = await this.getTokenLimit();
-    if (!this.canWrite(room, senderRole, tokenLimit)) {
-      throw new ForbiddenException(this.writeBlockedMessage(room, tokenLimit));
+    if (!this.canWrite(room, senderRole)) {
+      throw new ForbiddenException(this.writeBlockedMessage(room));
     }
 
     const type: ChatMessageType = hasImage && !hasText ? ChatMessageType.IMAGE : ChatMessageType.TEXT;
@@ -566,18 +580,16 @@ export class ChatService {
     return result;
   }
 
-  private serializeRoom(r: RoomWithRelations, tokenLimit: number) {
+  private serializeRoom(r: RoomWithRelations) {
     return {
       id: r.id,
       status: r.status,
       unlockedAt: r.unlockedAt,
-      gracePeriodEnd: r.gracePeriodEnd,
+      expiresAt: r.expiresAt,
       lastMessageAt: r.lastMessageAt,
       studentInitiated: r.studentInitiated,
-      tokens: r.tokens,
-      tokenLimit,
-      tokensBlocked: this.isTokenBlocked(r, tokenLimit),
-      tokensBlockedAt: r.tokensBlockedAt,
+      blocked: r.blocked,
+      blockedAt: r.blockedAt,
       category: r.category,
       user: r.user,
       createdAt: r.createdAt,
@@ -585,123 +597,93 @@ export class ChatService {
     };
   }
 
-  /** Igual que serializeRoom pero resolviendo el límite por su cuenta. */
-  async serializeRoomAsync(r: RoomWithRelations) {
-    return this.serializeRoom(r, await this.getTokenLimit());
+  serializeRoomAsync(r: RoomWithRelations) {
+    return this.serializeRoom(r);
   }
 
   // --------------------------------------------------------------------------
-  // Tokens (strikes marcados por el admin)
+  // Bloqueo manual + vida del chat (acciones del admin)
   // --------------------------------------------------------------------------
 
-  /**
-   * Suma (o resta, con amount negativo) tokens a una sala. El balance queda
-   * acotado entre 0 y el límite configurado. Al alcanzar el límite el alumno
-   * deja de poder escribir; si el admin baja el balance, se desbloquea.
-   */
-  async addTokens(params: {
-    roomId: string;
-    adminId: string;
-    adminRole: UserRole;
-    amount: number;
-    reason?: string;
-  }) {
-    const { roomId, adminId, adminRole, amount, reason } = params;
-    if (!this.isAdminRole(adminRole)) {
-      throw new ForbiddenException('Solo un administrador puede marcar tokens');
-    }
-    if (!Number.isInteger(amount) || amount === 0) {
-      throw new BadRequestException('La cantidad de tokens debe ser un entero distinto de 0');
-    }
-
-    const room = await this.assertAccess(roomId, adminId, adminRole);
-    const tokenLimit = await this.getTokenLimit();
-
-    const next = Math.max(0, Math.min(tokenLimit, room.tokens + amount));
-    if (next === room.tokens) {
-      // Ya estaba en el piso o en el techo: no registro un evento vacío.
-      return {
-        room: this.serializeRoom(room, tokenLimit),
-        event: null,
-        changed: false,
-      };
-    }
-
-    const wasBlocked = this.isTokenBlocked(room, tokenLimit);
-    const isBlocked = next >= tokenLimit;
-
-    const [updated, event] = await this.prisma.$transaction([
-      this.prisma.chatRoom.update({
-        where: { id: roomId },
-        data: {
-          tokens: next,
-          tokensBlockedAt: isBlocked
-            ? (wasBlocked ? room.tokensBlockedAt : new Date())
-            : null,
-        },
-        include: {
-          user: { select: { id: true, firstName: true, lastName: true, email: true } },
-          category: { select: { id: true, name: true, slug: true, image: true } },
-        },
-      }),
-      this.prisma.chatTokenEvent.create({
-        data: {
-          roomId,
-          adminId,
-          amount: next - room.tokens,
-          balanceAfter: next,
-          reason: reason?.trim() || null,
-        },
-      }),
-    ]);
-
-    return {
-      room: this.serializeRoom(updated, tokenLimit),
-      event,
-      changed: true,
-      blockedNow: isBlocked && !wasBlocked,
-      unblockedNow: !isBlocked && wasBlocked,
-    };
-  }
-
-  /** Vuelve el contador a 0 y desbloquea al alumno. */
-  async resetTokens(params: {
-    roomId: string;
-    adminId: string;
-    adminRole: UserRole;
-    reason?: string;
-  }) {
-    const { roomId, adminId, adminRole, reason } = params;
-    const room = await this.assertAccess(roomId, adminId, adminRole);
-    if (!this.isAdminRole(adminRole)) {
-      throw new ForbiddenException('Solo un administrador puede resetear tokens');
-    }
-    if (room.tokens === 0) {
-      const tokenLimit = await this.getTokenLimit();
-      return { room: this.serializeRoom(room, tokenLimit), event: null, changed: false };
-    }
-    return this.addTokens({
-      roomId,
-      adminId,
-      adminRole,
-      amount: -room.tokens,
-      reason: reason ?? 'Reset de tokens',
-    });
-  }
-
-  async listTokenEvents(roomId: string, userId: string, role: UserRole) {
-    await this.assertAccess(roomId, userId, role);
-    if (!this.isAdminRole(role)) {
-      throw new ForbiddenException('Historial disponible solo para administradores');
-    }
-    return this.prisma.chatTokenEvent.findMany({
-      where: { roomId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+  private async updateRoomReturning(
+    roomId: string,
+    data: Prisma.ChatRoomUpdateInput,
+  ): Promise<RoomWithRelations> {
+    return this.prisma.chatRoom.update({
+      where: { id: roomId },
+      data,
       include: {
-        admin: { select: { id: true, firstName: true, lastName: true, email: true } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        category: { select: { id: true, name: true, slug: true, image: true } },
       },
     });
+  }
+
+  /** Bloquea (o desbloquea) el chat: el alumno deja de poder escribir. */
+  async setBlocked(params: {
+    roomId: string;
+    adminId: string;
+    adminRole: UserRole;
+    blocked: boolean;
+  }) {
+    const { roomId, adminId, adminRole, blocked } = params;
+    if (!this.isAdminRole(adminRole)) {
+      throw new ForbiddenException('Solo un administrador puede bloquear el chat');
+    }
+    const room = await this.assertAccess(roomId, adminId, adminRole);
+    if (room.blocked === blocked) {
+      return { room: this.serializeRoom(room), changed: false };
+    }
+    const updated = await this.updateRoomReturning(roomId, {
+      blocked,
+      blockedAt: blocked ? new Date() : null,
+    });
+    return { room: this.serializeRoom(updated), changed: true };
+  }
+
+  /**
+   * Extiende (o reabre) la vida del chat. Empuja expiresAt a now + días y, si
+   * estaba cerrado, lo vuelve a ACTIVE. Si nunca se desbloqueó, lo desbloquea.
+   */
+  async extendRoom(params: {
+    roomId: string;
+    adminId: string;
+    adminRole: UserRole;
+    days?: number;
+  }) {
+    const { roomId, adminId, adminRole, days } = params;
+    if (!this.isAdminRole(adminRole)) {
+      throw new ForbiddenException('Solo un administrador puede extender el chat');
+    }
+    const room = await this.assertAccess(roomId, adminId, adminRole);
+    const now = new Date();
+    const span = days && days > 0 ? days : await this.getLifetimeDays();
+    // Extiende desde el vencimiento futuro si aún no venció; si ya venció, desde hoy.
+    const base = room.expiresAt && room.expiresAt > now ? room.expiresAt : now;
+    const expiresAt = new Date(base);
+    expiresAt.setDate(expiresAt.getDate() + span);
+
+    const updated = await this.updateRoomReturning(roomId, {
+      expiresAt,
+      unlockedAt: room.unlockedAt ?? now,
+      status: ChatRoomStatus.ACTIVE,
+    });
+    return { room: this.serializeRoom(updated), changed: true };
+  }
+
+  /**
+   * Reabre/extiende todas las salas ya desbloqueadas de un usuario. Se llama
+   * cuando el alumno compra otra formación: renueva la vida del chat a
+   * now + días de vida y lo vuelve ACTIVE (respeta el bloqueo manual).
+   */
+  async reopenRoomsForUser(userId: string): Promise<{ reopened: number }> {
+    const now = new Date();
+    const expiresAt = await this.computeExpiry(now);
+    const { count } = await this.prisma.chatRoom.updateMany({
+      where: { userId, unlockedAt: { not: null } },
+      data: { expiresAt, status: ChatRoomStatus.ACTIVE },
+    });
+    return { reopened: count };
   }
 
   // --------------------------------------------------------------------------
@@ -728,9 +710,8 @@ export class ChatService {
     file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
   ) {
     const room = await this.assertAccess(roomId, userId, role);
-    const tokenLimit = await this.getTokenLimit();
-    if (!this.canWrite(room, role, tokenLimit)) {
-      throw new ForbiddenException(this.writeBlockedMessage(room, tokenLimit));
+    if (!this.canWrite(room, role)) {
+      throw new ForbiddenException(this.writeBlockedMessage(room));
     }
     if (!file || !file.buffer) {
       throw new BadRequestException('Archivo inválido');

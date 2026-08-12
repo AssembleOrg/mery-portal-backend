@@ -405,11 +405,20 @@ model ChatRoom {
   lastStudentReadAt DateTime?
   lastAdminReadAt   DateTime?
 
-  // Tokens (strikes) que el admin marca manualmente. Al alcanzar el límite
-  // configurable (setting "chat.tokenLimit", default 3) el alumno deja de
-  // poder escribir en esta sala. El admin puede restar o resetear.
+  // Bloqueo manual del chat por parte del admin. Cuando blocked=true el alumno
+  // no puede enviar mensajes nuevos (solo lectura); el admin puede desbloquear.
+  blocked          Boolean         @default(false)
+  blockedAt        DateTime?
+
+  // Fin de vida del chat: se setea al desbloquearse (unlockedAt + días de vida,
+  // setting "chat.lifetimeDays", default 30). Al vencer pasa a CLOSED. El admin
+  // puede extenderlo y comprar otra formación lo reabre.
+  expiresAt        DateTime?
+
+  // DEPRECADO: sistema de tokens reemplazado por `blocked`. Se conservan las
+  // columnas para no perder historial; no se usan más.
   tokens           Int             @default(0)
-  tokensBlockedAt  DateTime?       // momento en que alcanzó el límite (null = no bloqueado)
+  tokensBlockedAt  DateTime?
 
   messages         ChatMessage[]
   tokenEvents      ChatTokenEvent[]

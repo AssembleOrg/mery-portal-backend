@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
 import {
-  CHAT_TOKEN_LIMIT_KEY,
+  CHAT_LIFETIME_DAYS_KEY,
   getSettingDefinition,
   SETTING_DEFINITIONS,
   SettingDefinition,
@@ -80,9 +80,9 @@ export class SettingsService {
     return this.parse(def, await this.getRaw(key)) as number;
   }
 
-  async getChatTokenLimit(): Promise<number> {
-    const limit = await this.getNumber(CHAT_TOKEN_LIMIT_KEY);
-    return limit > 0 ? limit : 3;
+  async getChatLifetimeDays(): Promise<number> {
+    const days = await this.getNumber(CHAT_LIFETIME_DAYS_KEY);
+    return days > 0 ? days : 30;
   }
 
   /** Todas las settings conocidas con su valor actual (para el panel admin). */
