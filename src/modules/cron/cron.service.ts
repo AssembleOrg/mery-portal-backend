@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../shared/services';
 import { CouponsService } from '../coupons/coupons.service';
 import { ChatService } from '../chat/chat.service';
+import { PromoService } from '../promo/promo.service';
 
 @Injectable()
 export class CronService {
@@ -12,6 +13,7 @@ export class CronService {
     private readonly prisma: PrismaService,
     private readonly couponsService: CouponsService,
     private readonly chatService: ChatService,
+    private readonly promoService: PromoService,
   ) {}
 
   /**
@@ -192,6 +194,27 @@ export class CronService {
       }
     } catch (error) {
       this.logger.error('❌ [CRON] Error recomputando estados de chat:', error);
+    }
+  }
+
+  /**
+   * Emite los cupones-regalo de las campañas de promo que ya terminaron y
+   * todavía no se emitieron. Corre todos los días a las 4 AM (hora Argentina).
+   */
+  @Cron('0 4 * * *', {
+    name: 'issue-promo-rewards',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async issuePromoRewards() {
+    try {
+      const { campaigns, issued } = await this.promoService.issueDueRewards();
+      if (issued > 0) {
+        this.logger.log(
+          `🎁 [CRON] ${issued} cupón(es)-regalo emitido(s) en ${campaigns} campaña(s)`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('❌ [CRON] Error emitiendo cupones-regalo:', error);
     }
   }
 }

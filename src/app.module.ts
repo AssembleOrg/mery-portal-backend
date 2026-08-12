@@ -21,6 +21,7 @@ import { ChatModule } from './modules/chat';
 import { QuizModule } from './modules/quiz';
 import { FormsModule } from './modules/forms';
 import { SettingsModule } from './modules/settings';
+import { PromoModule } from './modules/promo/promo.module';
 import { PublicCatalogModule } from './modules/public-catalog';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
@@ -68,6 +69,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     QuizModule,
     FormsModule,
     SettingsModule,
+    PromoModule,
     PublicCatalogModule,
   ],
   controllers: [AppController],

@@ -27,80 +27,81 @@ model User {
   country   String?
   city      String?
   isActive  Boolean  @default(true)
-  
+
   // Email verification
-  isEmailVerified    Boolean   @default(false)
-  emailVerificationToken String?
-  emailVerificationExpires DateTime?
+  isEmailVerified           Boolean   @default(false)
+  emailVerificationToken    String?
+  emailVerificationExpires  DateTime?
   lastVerificationEmailSent DateTime?
-  
+
   // Password reset
-  passwordResetToken String?
-  passwordResetExpires DateTime?
+  passwordResetToken         String?
+  passwordResetExpires       DateTime?
   lastPasswordResetEmailSent DateTime?
-  
+
   // Relations
   categoryPurchases CategoryPurchase[]
   videoViews        VideoView[]
   cart              Cart?
   presencialVotes   PresencialVote[]
   chatRooms         ChatRoom[]
-  chatMessages     ChatMessage[]
+  chatMessages      ChatMessage[]
   quizAttempts      QuizAttempt[]
-  chatTokenEvents   ChatTokenEvent[] @relation("ChatTokenEventAdmin")
-  
+  chatTokenEvents   ChatTokenEvent[]   @relation("ChatTokenEventAdmin")
+  coupons           Coupon[]           @relation("UserCoupons")
+
   // Audit fields
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
-  
+
   @@map("users")
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String?
-  action    String   // CREATE, UPDATE, DELETE, etc.
-  entity    String   // Table name
-  entityId  String   // Record ID
+  action    String // CREATE, UPDATE, DELETE, etc.
+  entity    String // Table name
+  entityId  String // Record ID
   oldValues Json?
   newValues Json?
   ipAddress String?
   location  String?
   userAgent String?
-  
+
   createdAt DateTime @default(now())
-  
+
   @@map("audit_logs")
 }
 
 model VideoCategory {
-  id               String   @id @default(cuid())
+  id               String  @id @default(cuid())
   name             String
-  slug             String   @unique
+  slug             String  @unique
   description      String?
-  long_description String?  @db.Text
+  long_description String? @db.Text
   image            String?
   target           String?
-  order            Int      @default(0)
-  isActive         Boolean  @default(true)
-  
+  order            Int     @default(0)
+  isActive         Boolean @default(true)
+
   // Multilanguage fields (English versions)
-  long_description_en String?  @db.Text
+  long_description_en String? @db.Text
   target_en           String?
-  
+
   // Course modality
   modalidad    String?
   modalidad_en String?
-  
+
   // What students will learn
-  learn    String?  @db.Text
-  learn_en String?  @db.Text
-  
+  learn    String? @db.Text
+  learn_en String? @db.Text
+
   // What the course includes (structured data)
   includes_category    Json?
   includes_category_en Json?
-    
+
   // Pricing (a nivel de curso/categoría) - Dual currency
   priceARS         Decimal  @db.Decimal(10, 2)
   priceUSD         Decimal  @db.Decimal(10, 2)
@@ -109,121 +110,121 @@ model VideoCategory {
   originalPriceARS Decimal? @db.Decimal(10, 2)
   originalPriceUSD Decimal? @db.Decimal(10, 2)
   isFree           Boolean  @default(false)
-  
-  videos           Video[]
-  purchases        CategoryPurchase[]
-  cartItems        CartItem[]
-  coupons          CouponCategory[]
-  chatRooms        ChatRoom[]
-  quizAttempts     QuizAttempt[]
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  deletedAt        DateTime?
+  videos       Video[]
+  purchases    CategoryPurchase[]
+  cartItems    CartItem[]
+  coupons      CouponCategory[]
+  chatRooms    ChatRoom[]
+  quizAttempts QuizAttempt[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@map("video_categories")
 }
 
 model Video {
-  id              String        @id @default(cuid())
-  title           String
-  description     String?
-  thumbnail       String?
-  duration        Int?          // Duration in seconds
-  
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+  thumbnail   String?
+  duration    Int? // Duration in seconds
+
   // Vimeo Integration
-  vimeoId         String
-  vimeoUrl        String?
-  
+  vimeoId  String
+  vimeoUrl String?
+
   // Organization
-  categoryId      String
-  category        VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  order           Int           @default(0)
-  
+  categoryId String
+  category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  order      Int           @default(0)
+
   // Status
-  isPublished     Boolean       @default(false)
-  publishedAt     DateTime?
-  
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+
   // Content
-  contenidos      String?       @db.Text  // Video content/syllabus
-  downloads       Json?                   // Downloadable resources
-  
+  contenidos String? @db.Text // Video content/syllabus
+  downloads  Json? // Downloadable resources
+
   // SEO
   metaTitle       String?
   metaDescription String?
-  
+
   // Relations
-  views           VideoView[]
-  
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
-  
+  views VideoView[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
   @@map("videos")
 }
 
 model CategoryPurchase {
-  id              String        @id @default(cuid())
-  userId          String
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId      String
-  category        VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
   // Payment info
-  amount          Decimal  @db.Decimal(10, 2)
-  currency        String   @default("USD")
-  paymentMethod   String?  // "credit_card", "paypal", etc.
-  transactionId   String?  // External payment provider transaction ID
-  paymentStatus   String   @default("completed") // "pending", "completed", "failed", "refunded"
-  
+  amount        Decimal @db.Decimal(10, 2)
+  currency      String  @default("USD")
+  paymentMethod String? // "credit_card", "paypal", etc.
+  transactionId String? // External payment provider transaction ID
+  paymentStatus String  @default("completed") // "pending", "completed", "failed", "refunded"
+
   // Access control
-  expiresAt       DateTime? // null = permanent access
-  isActive        Boolean  @default(true)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  expiresAt DateTime? // null = permanent access
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([userId, categoryId])
   @@index([transactionId])
   @@map("category_purchases")
 }
 
 model VideoView {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  videoId         String
-  video           Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId String
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
   // Analytics
-  watchedSeconds  Int      @default(0)
-  totalSeconds    Int?
-  progress        Int      @default(0) // Percentage 0-100
-  completed       Boolean  @default(false)
-  
+  watchedSeconds Int     @default(0)
+  totalSeconds   Int?
+  progress       Int     @default(0) // Percentage 0-100
+  completed      Boolean @default(false)
+
   // Session info
-  ipAddress       String?
-  userAgent       String?
-  device          String?  // "desktop", "mobile", "tablet"
-  
-  lastWatchedAt   DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  ipAddress String?
+  userAgent String?
+  device    String? // "desktop", "mobile", "tablet"
+
+  lastWatchedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
   @@unique([userId, videoId])
   @@map("video_views")
 }
 
 model Cart {
-  id        String     @id @default(cuid())
-  userId    String     @unique
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  items     CartItem[]
-  
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@map("carts")
 }
 
@@ -233,13 +234,13 @@ model CartItem {
   cart       Cart          @relation(fields: [cartId], references: [id], onDelete: Cascade)
   categoryId String
   category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
+
   // Snapshot of prices at the time of adding to cart
-  priceARS   Decimal       @db.Decimal(10, 2)
-  priceUSD   Decimal       @db.Decimal(10, 2)
-  
-  addedAt    DateTime      @default(now())
-  
+  priceARS Decimal @db.Decimal(10, 2)
+  priceUSD Decimal @db.Decimal(10, 2)
+
+  addedAt DateTime @default(now())
+
   @@unique([cartId, categoryId])
   @@map("cart_items")
 }
@@ -251,51 +252,51 @@ enum PresencialPollStatus {
 }
 
 model PresencialPoll {
-  id          String   @id @default(cuid())
+  id          String               @id @default(cuid())
   title       String
   description String?
   status      PresencialPollStatus @default(draft)
   deadlineAt  DateTime?
-  
+
   // Eligibility stored as JSON: { courseIds: string[], userOverrides: Array<{ userId?: string, email?: string, allowed: boolean }> }
-  eligibility Json     @default("{\"courseIds\":[],\"userOverrides\":[]}")
-  
-  options     PresencialPollOption[]
-  votes       PresencialVote[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  eligibility Json @default("{\"courseIds\":[],\"userOverrides\":[]}")
+
+  options PresencialPollOption[]
+  votes   PresencialVote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([status])
   @@map("presencial_polls")
 }
 
 model PresencialPollOption {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   pollId          String
   poll            PresencialPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
   date            DateTime // Stored as date only (time will be ignored)
-  startTime       String   // HH:mm format
-  durationMinutes Int      @default(120)
-  
-  votes           PresencialVote[]
-  
-  createdAt       DateTime @default(now())
-  
+  startTime       String // HH:mm format
+  durationMinutes Int            @default(120)
+
+  votes PresencialVote[]
+
+  createdAt DateTime @default(now())
+
   @@map("presencial_poll_options")
 }
 
 model PresencialVote {
-  id        String   @id @default(cuid())
-  pollId    String
-  poll      PresencialPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  optionId  String
-  option    PresencialPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userName  String?
-  votedAt   DateTime @default(now())
-  
+  id       String               @id @default(cuid())
+  pollId   String
+  poll     PresencialPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId String
+  option   PresencialPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userName String?
+  votedAt  DateTime             @default(now())
+
   @@unique([pollId, userId])
   @@index([pollId])
   @@index([optionId])
@@ -324,22 +325,59 @@ model Coupon {
   currentUses     Int       @default(0)
   isActive        Boolean   @default(true)
   appliesToAll    Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+
+  // Cupón personal: si userId != null, solo lo puede usar ese usuario.
+  userId                 String?
+  user                   User?          @relation("UserCoupons", fields: [userId], references: [id], onDelete: Cascade)
+  // Si true, no aplica a las formaciones que el usuario ya compró (para "otra formación").
+  excludeOwnedCategories Boolean        @default(false)
+  // Campaña que lo emitió (si es un cupón-regalo automático).
+  sourceCampaignId       String?
+  sourceCampaign         PromoCampaign? @relation(fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   categories   CouponCategory[]
   consumptions CouponConsumption[]
 
+  @@index([userId])
+  @@index([sourceCampaignId])
   @@map("coupons")
+}
+
+/// Campaña de promo gestionada desde admin. El descuento general se aplica con
+/// un cupón normal; la campaña define además la recompensa (cupón-regalo) que
+/// reciben quienes compran dentro de la ventana, emitida al cerrar la promo.
+model PromoCampaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  startsAt    DateTime
+  endsAt      DateTime
+  isActive    Boolean  @default(true)
+
+  // Recompensa: cupón-regalo por-usuario. null en rewardDiscountPercent = sin recompensa.
+  rewardDiscountPercent Int?
+  rewardValidityDays    Int       @default(90)
+  rewardExcludeOwned    Boolean   @default(true)
+  rewardsIssuedAt       DateTime? // cuándo se emitieron los cupones-regalo (null = pendiente)
+
+  issuedCoupons Coupon[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("promo_campaigns")
 }
 
 // Join table: Coupon <-> VideoCategory
 model CouponCategory {
-  id         String        @id @default(cuid())
+  id         String   @id @default(cuid())
   couponId   String
   categoryId String
-  createdAt  DateTime      @default(now())
+  createdAt  DateTime @default(now())
 
   coupon   Coupon        @relation(fields: [couponId], references: [id], onDelete: Cascade)
   category VideoCategory @relation(fields: [categoryId], references: [id])
@@ -350,14 +388,14 @@ model CouponCategory {
 
 // Tracks coupon consumptions pending payment confirmation
 model CouponConsumption {
-  id          String    @id @default(cuid())
-  couponId    String
-  userId      String
+  id           String    @id @default(cuid())
+  couponId     String
+  userId       String
   preferenceId String?
-  status      String    @default("pending") // pending | confirmed | expired
-  consumedAt  DateTime  @default(now())
-  expiresAt   DateTime
-  confirmedAt DateTime?
+  status       String    @default("pending") // pending | confirmed | expired
+  consumedAt   DateTime  @default(now())
+  expiresAt    DateTime
+  confirmedAt  DateTime?
 
   coupon Coupon @relation(fields: [couponId], references: [id])
 
@@ -370,10 +408,10 @@ model CouponConsumption {
 // ============================================================================
 
 enum ChatRoomStatus {
-  LOCKED  // compra activa pero progreso de videos < 95%
-  ACTIVE  // desbloqueado: alumno y admin pueden chatear
-  GRACE   // compra expiró, dentro de 90 días post-expiración, sigue activo
-  CLOSED  // pasaron los 90 días de gracia → solo lectura
+  LOCKED // compra activa pero progreso de videos < 95%
+  ACTIVE // desbloqueado: alumno y admin pueden chatear
+  GRACE // compra expiró, dentro de 90 días post-expiración, sigue activo
+  CLOSED // pasaron los 90 días de gracia → solo lectura
 }
 
 enum ChatMessageType {
@@ -387,18 +425,18 @@ enum ChatSenderRole {
 }
 
 model ChatRoom {
-  id               String          @id @default(cuid())
-  userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId       String
-  category         VideoCategory   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
-  status           ChatRoomStatus  @default(LOCKED)
-  unlockedAt       DateTime?       // primera vez que pasó a ACTIVE
-  gracePeriodEnd   DateTime?       // expiresAt + 90 días (solo si aplica)
+  status         ChatRoomStatus @default(LOCKED)
+  unlockedAt     DateTime? // primera vez que pasó a ACTIVE
+  gracePeriodEnd DateTime? // expiresAt + 90 días (solo si aplica)
 
   // First student message marker (para enviar email una sola vez)
-  studentInitiated Boolean         @default(false)
+  studentInitiated Boolean @default(false)
 
   // Read tracking (1-a-1: sabemos quién leyó hasta cuándo)
   lastMessageAt     DateTime?
@@ -407,24 +445,24 @@ model ChatRoom {
 
   // Bloqueo manual del chat por parte del admin. Cuando blocked=true el alumno
   // no puede enviar mensajes nuevos (solo lectura); el admin puede desbloquear.
-  blocked          Boolean         @default(false)
-  blockedAt        DateTime?
+  blocked   Boolean   @default(false)
+  blockedAt DateTime?
 
   // Fin de vida del chat: se setea al desbloquearse (unlockedAt + días de vida,
   // setting "chat.lifetimeDays", default 30). Al vencer pasa a CLOSED. El admin
   // puede extenderlo y comprar otra formación lo reabre.
-  expiresAt        DateTime?
+  expiresAt DateTime?
 
   // DEPRECADO: sistema de tokens reemplazado por `blocked`. Se conservan las
   // columnas para no perder historial; no se usan más.
-  tokens           Int             @default(0)
-  tokensBlockedAt  DateTime?
+  tokens          Int       @default(0)
+  tokensBlockedAt DateTime?
 
-  messages         ChatMessage[]
-  tokenEvents      ChatTokenEvent[]
+  messages    ChatMessage[]
+  tokenEvents ChatTokenEvent[]
 
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, categoryId])
   @@index([status])
@@ -434,17 +472,17 @@ model ChatRoom {
 
 /// Historial de tokens marcados por el admin en una sala de chat.
 model ChatTokenEvent {
-  id           String   @id @default(cuid())
-  roomId       String
-  room         ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  adminId      String
-  admin        User     @relation("ChatTokenEventAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  id      String   @id @default(cuid())
+  roomId  String
+  room    ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  adminId String
+  admin   User     @relation("ChatTokenEventAdmin", fields: [adminId], references: [id], onDelete: Cascade)
 
-  amount       Int      // delta aplicado (+1, +3, -1…). 0 no se registra.
-  balanceAfter Int      // tokens de la sala luego del movimiento
-  reason       String?  @db.Text
+  amount       Int // delta aplicado (+1, +3, -1…). 0 no se registra.
+  balanceAfter Int // tokens de la sala luego del movimiento
+  reason       String? @db.Text
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([roomId, createdAt])
   @@map("chat_token_events")
@@ -467,9 +505,9 @@ model AppSetting {
 /// Respuestas rápidas reutilizables que el admin inserta en el chat de un alumno.
 /// Son globales (compartidas por todos los admins/subadmins).
 model ChatQuickReply {
-  id        String   @id @default(cuid())
-  title     String
-  body      String   @db.Text
+  id    String @id @default(cuid())
+  title String
+  body  String @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -483,11 +521,11 @@ model ChatQuickReply {
 // ============================================================================
 
 model QuizAttempt {
-  id               String        @id @default(cuid())
-  userId           String
-  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId       String
-  category         VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   // Respuestas enviadas: { [questionId]: boolean } (true = Verdadero)
   answers          Json
@@ -497,28 +535,28 @@ model QuizAttempt {
   totalQuestions   Int
   passed           Boolean
 
-  createdAt        DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, categoryId, createdAt])
   @@map("quiz_attempts")
 }
 
 model ChatMessage {
-  id         String           @id @default(cuid())
+  id         String         @id @default(cuid())
   roomId     String
-  room       ChatRoom         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room       ChatRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   senderId   String
-  sender     User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender     User           @relation(fields: [senderId], references: [id], onDelete: Cascade)
   senderRole ChatSenderRole
 
-  type       ChatMessageType  @default(TEXT)
-  content    String?          @db.Text
-  imageUrl   String?
-  imageKey   String?          // key en DO Spaces, para poder borrar si hace falta
+  type     ChatMessageType @default(TEXT)
+  content  String?         @db.Text
+  imageUrl String?
+  imageKey String? // key en DO Spaces, para poder borrar si hace falta
 
-  readAt     DateTime?
+  readAt DateTime?
 
-  createdAt  DateTime         @default(now())
+  createdAt DateTime @default(now())
 
   @@index([roomId, createdAt])
   @@map("chat_messages")
@@ -533,33 +571,33 @@ enum FormStatus {
 }
 
 model Form {
-  id             String       @id @default(cuid())
-  title          String
-  slug           String       @unique
-  description    String?      @db.Text
-  status         FormStatus   @default(draft)
+  id          String     @id @default(cuid())
+  title       String
+  slug        String     @unique
+  description String?    @db.Text
+  status      FormStatus @default(draft)
 
   // Field definitions as JSON array: Array<{ id, type, label, description?, placeholder?, required?, options?: [{id,label}], allowContext?, contextLabel? }>
-  fields         Json         @default("[]")
+  fields Json @default("[]")
 
-  successMessage String?      @db.Text
-  closedMessage  String?      @db.Text
+  successMessage String? @db.Text
+  closedMessage  String? @db.Text
   submitLabel    String?
 
-  responses      FormResponse[]
+  responses FormResponse[]
 
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  deletedAt      DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([status])
   @@map("forms")
 }
 
 model FormResponse {
-  id        String   @id @default(cuid())
-  formId    String
-  form      Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  formId String
+  form   Form   @relation(fields: [formId], references: [id], onDelete: Cascade)
 
   // { [fieldId]: string | string[] | { value: boolean, context?: string } }
   answers   Json

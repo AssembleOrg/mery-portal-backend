@@ -60,8 +60,8 @@ export class CouponsController {
 
   // Public for authenticated users (not admin-only)
   @Post('validate')
-  async validate(@Body() dto: ValidateCouponDto) {
-    return this.couponsService.validateCoupon(dto);
+  async validate(@Body() dto: ValidateCouponDto, @CurrentUser() user: JwtPayload) {
+    return this.couponsService.validateCoupon(dto, user?.sub);
   }
 
   @Post(':id/consume')

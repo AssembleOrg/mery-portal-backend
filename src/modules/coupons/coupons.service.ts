@@ -170,7 +170,7 @@ export class CouponsService {
     });
   }
 
-  async validateCoupon(dto: ValidateCouponDto) {
+  async validateCoupon(dto: ValidateCouponDto, userId?: string) {
     const coupon = await this.prisma.coupon.findFirst({
       where: { code: dto.code, deletedAt: null },
       include: { categories: true },
@@ -181,6 +181,10 @@ export class CouponsService {
     }
     if (!coupon.isActive) {
       return { valid: false, discountPercent: 0, couponCode: dto.code, couponId: null, applicableCategoryIds: [], message: 'Cupón inactivo' };
+    }
+    // Cupón personal: solo lo puede usar su dueño.
+    if (coupon.userId && coupon.userId !== userId) {
+      return { valid: false, discountPercent: 0, couponCode: dto.code, couponId: null, applicableCategoryIds: [], message: 'Este cupón es personal y no está asignado a tu cuenta' };
     }
 
     const now = new Date();
@@ -205,6 +209,23 @@ export class CouponsService {
 
     if (applicableCategoryIds.length === 0) {
       return { valid: false, discountPercent: 0, couponCode: dto.code, couponId: null, applicableCategoryIds: [], message: 'El cupón no aplica para los cursos seleccionados' };
+    }
+
+    // "Otra formación": excluye las categorías que el usuario ya compró.
+    if (coupon.excludeOwnedCategories && userId) {
+      const owned = await this.prisma.categoryPurchase.findMany({
+        where: {
+          userId,
+          isActive: true,
+          categoryId: { in: applicableCategoryIds },
+        },
+        select: { categoryId: true },
+      });
+      const ownedSet = new Set(owned.map((p) => p.categoryId));
+      applicableCategoryIds = applicableCategoryIds.filter((id) => !ownedSet.has(id));
+      if (applicableCategoryIds.length === 0) {
+        return { valid: false, discountPercent: 0, couponCode: dto.code, couponId: null, applicableCategoryIds: [], message: 'Este cupón es para una formación que todavía no tengas' };
+      }
     }
 
     return {
