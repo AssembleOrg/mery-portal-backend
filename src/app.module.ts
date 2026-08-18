@@ -22,6 +22,7 @@ import { QuizModule } from './modules/quiz';
 import { FormsModule } from './modules/forms';
 import { SettingsModule } from './modules/settings';
 import { RewardsModule } from './modules/rewards/rewards.module';
+import { CheckoutModule } from './modules/checkout/checkout.module';
 import { PublicCatalogModule } from './modules/public-catalog';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
@@ -70,6 +71,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     FormsModule,
     SettingsModule,
     RewardsModule,
+    CheckoutModule,
     PublicCatalogModule,
   ],
   controllers: [AppController],
