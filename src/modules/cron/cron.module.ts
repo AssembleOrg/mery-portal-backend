@@ -4,10 +4,9 @@ import { CronService } from './cron.service';
 import { PrismaService } from '../../shared/services';
 import { CouponsModule } from '../coupons';
 import { ChatModule } from '../chat';
-import { PromoModule } from '../promo/promo.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), CouponsModule, ChatModule, PromoModule],
+  imports: [ScheduleModule.forRoot(), CouponsModule, ChatModule],
   providers: [CronService, PrismaService],
   exports: [CronService],
 })

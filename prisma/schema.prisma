@@ -328,12 +328,9 @@ model Coupon {
 
   // Cupón personal: si userId != null, solo lo puede usar ese usuario.
   userId                 String?
-  user                   User?          @relation("UserCoupons", fields: [userId], references: [id], onDelete: Cascade)
+  user                   User?   @relation("UserCoupons", fields: [userId], references: [id], onDelete: Cascade)
   // Si true, no aplica a las formaciones que el usuario ya compró (para "otra formación").
-  excludeOwnedCategories Boolean        @default(false)
-  // Campaña que lo emitió (si es un cupón-regalo automático).
-  sourceCampaignId       String?
-  sourceCampaign         PromoCampaign? @relation(fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+  excludeOwnedCategories Boolean @default(false)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -343,33 +340,7 @@ model Coupon {
   consumptions CouponConsumption[]
 
   @@index([userId])
-  @@index([sourceCampaignId])
   @@map("coupons")
-}
-
-/// Campaña de promo gestionada desde admin. El descuento general se aplica con
-/// un cupón normal; la campaña define además la recompensa (cupón-regalo) que
-/// reciben quienes compran dentro de la ventana, emitida al cerrar la promo.
-model PromoCampaign {
-  id          String   @id @default(cuid())
-  name        String
-  description String?  @db.Text
-  startsAt    DateTime
-  endsAt      DateTime
-  isActive    Boolean  @default(true)
-
-  // Recompensa: cupón-regalo por-usuario. null en rewardDiscountPercent = sin recompensa.
-  rewardDiscountPercent Int?
-  rewardValidityDays    Int       @default(90)
-  rewardExcludeOwned    Boolean   @default(true)
-  rewardsIssuedAt       DateTime? // cuándo se emitieron los cupones-regalo (null = pendiente)
-
-  issuedCoupons Coupon[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("promo_campaigns")
 }
 
 // Join table: Coupon <-> VideoCategory

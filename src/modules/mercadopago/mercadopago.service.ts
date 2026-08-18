@@ -6,6 +6,7 @@ import { PrismaService } from '../../shared/services';
 import { WebhookNotificationDto, MercadoPagoPaymentDto } from './dto';
 import { CartService } from '../cart/cart.service';
 import { ChatService } from '../chat/chat.service';
+import { RewardsService } from '../rewards/rewards.service';
 
 @Injectable()
 export class MercadoPagoService {
@@ -22,6 +23,7 @@ export class MercadoPagoService {
     private prisma: PrismaService,
     private cartService: CartService,
     private chatService: ChatService,
+    private rewardsService: RewardsService,
   ) {
     this.accessToken = this.configService.get<string>('MP_ACCESS_TOKEN') || '';
     this.webhookSecret = this.configService.get<string>('MP_WEBHOOK_SECRET') || '';
@@ -237,6 +239,11 @@ export class MercadoPagoService {
         return;
       }
 
+      // Nombres de las formaciones recién otorgadas en ESTA corrida. Sirve para
+      // el email de agradecimiento y como guardia de idempotencia: si el webhook
+      // se reprocesa, no habrá creaciones nuevas y no se re-emite la recompensa.
+      const createdCategoryNames: string[] = [];
+
       // Use transaction for atomicity
       const purchasesCreated = await this.prisma.$transaction(async (tx) => {
         const purchases: any[] = [];
@@ -283,6 +290,7 @@ export class MercadoPagoService {
 
             this.logger.log(`✅ Acceso otorgado: "${category.name}"`);
             purchases.push(purchase);
+            createdCategoryNames.push(category.name);
           } catch (error) {
             this.logger.error(`❌ Error otorgando acceso a "${category.name}":`, error);
             throw error; // Rollback entire transaction on any error
@@ -311,6 +319,16 @@ export class MercadoPagoService {
         }
       } catch (chatError) {
         this.logger.warn(`⚠️ Error reabriendo chats: ${chatError.message}`);
+      }
+
+      // Recompensa por compra: cupón-regalo personal 20% + email de gracias.
+      // Solo si hubo al menos una compra NUEVA (idempotente ante reintentos MP).
+      if (createdCategoryNames.length > 0) {
+        try {
+          await this.rewardsService.issuePurchaseReward(userId, createdCategoryNames);
+        } catch (rewardError) {
+          this.logger.warn(`⚠️ Error emitiendo cupón-regalo: ${rewardError.message}`);
+        }
       }
 
     } catch (error) {
