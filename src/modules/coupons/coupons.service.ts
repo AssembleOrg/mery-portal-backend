@@ -3,9 +3,16 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
 import { CreateCouponDto, UpdateCouponDto, ValidateCouponDto } from './dto';
+
+/**
+ * Cupones que no se pueden eliminar vía request (borrado protegido). Se referencian
+ * por ID porque el código puede cambiar. Ej.: MERY40 (promo 40% en pesos).
+ */
+const PROTECTED_COUPON_IDS = new Set<string>(['cmsy0uzw60000gxy4z87n96sb']);
 
 @Injectable()
 export class CouponsService {
@@ -157,6 +164,12 @@ export class CouponsService {
       where: { id, deletedAt: null },
     });
     if (!existing) throw new NotFoundException('Cupón no encontrado');
+
+    if (PROTECTED_COUPON_IDS.has(id)) {
+      throw new ForbiddenException(
+        'Este cupón está protegido y no puede eliminarse.',
+      );
+    }
 
     if (existing.currentUses > 0) {
       throw new BadRequestException(
