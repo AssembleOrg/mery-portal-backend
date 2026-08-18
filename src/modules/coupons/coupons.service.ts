@@ -255,6 +255,11 @@ export class CouponsService {
       where: { id, deletedAt: null },
     });
     if (!coupon) throw new NotFoundException('Cupón no encontrado');
+    if (coupon.userId && coupon.userId !== userId) {
+      throw new ForbiddenException(
+        'Este cupón es personal y no puede usarse desde otra cuenta',
+      );
+    }
 
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
@@ -318,6 +323,12 @@ export class CouponsService {
         });
         if (!coupon) {
           throw new NotFoundException('Cupón no encontrado');
+        }
+        // Cupón personal: solo puede reservarlo su dueño.
+        if (coupon.userId && coupon.userId !== userId) {
+          throw new ForbiddenException(
+            'Este cupón es personal y no puede usarse desde otra cuenta',
+          );
         }
 
         // Reserve for the same 15-minute window used by Mercado Pago preference.
