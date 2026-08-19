@@ -1,13 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
 import { CouponsService } from '../coupons/coupons.service';
+import { SettingsService } from '../settings/settings.service';
 
 /** priceARS con este valor centinela marca un curso USD-only (no se paga por MP). */
 const USD_ONLY_SENTINEL = 99999999;
 /** Cupones que fuerzan el pago a máximo 2 cuotas (por ID, no por código). */
-const FORCE_MAX_2_CUOTAS_COUPON_IDS = new Set<string>([
-  'cmsy0uzw60000gxy4z87n96sb', // MERY40
-]);
+const FORCE_MAX_2_CUOTAS_COUPON_IDS = new Set<string>([]);
 const ALLOWED_INSTALLMENTS = [2, 3, 6];
 const DEFAULT_INSTALLMENTS = 6;
 
@@ -39,7 +38,13 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly coupons: CouponsService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** Estado público de la promo global (para que el front la refleje). */
+  async getPromo() {
+    return this.settings.getCheckoutPromo();
+  }
 
   async quote(params: {
     userId: string;
@@ -65,8 +70,11 @@ export class CheckoutService {
       );
     }
 
-    // Validación de cupón server-side (autoritativa: incluye vigencia, categorías,
-    // propiedad del cupón personal y exclusión de formaciones ya compradas).
+    const promo = await this.settings.getCheckoutPromo();
+
+    // Descuento: si hay cupón, manda el cupón (validado server-side). Si no hay
+    // cupón y la promo global está activa, se aplica el descuento fijo a TODO.
+    // No se acumulan (cupón y promo son excluyentes).
     let discountPercent = 0;
     let couponId: string | null = null;
     let couponCodeResolved: string | null = null;
@@ -83,16 +91,26 @@ export class CheckoutService {
       couponId = res.couponId;
       couponCodeResolved = res.couponCode;
       applicable = new Set(res.applicableCategoryIds);
+    } else if (promo.active && promo.discountPercent > 0) {
+      discountPercent = promo.discountPercent;
+      applicable = new Set(arsCats.map((c) => c.id));
     }
 
-    // Cuotas: ciertos cupones fuerzan máximo 2. Sino, el plan pedido (2/3/6).
-    const force2 = !!couponId && FORCE_MAX_2_CUOTAS_COUPON_IDS.has(couponId);
+    // Cuotas: con la promo activa se topea al máximo configurado. Sin promo,
+    // algún cupón puede forzar 2; sino el plan pedido (2/3/6).
+    const forceCouponTwo =
+      !!couponId && FORCE_MAX_2_CUOTAS_COUPON_IDS.has(couponId);
     let installments = ALLOWED_INSTALLMENTS.includes(Number(params.installments))
       ? Number(params.installments)
       : DEFAULT_INSTALLMENTS;
-    if (force2) installments = 2;
-    // El descuento del 10% aplica solo al plan de 3 cuotas.
-    const cuotasFactor = installments === 3 ? 0.9 : 1;
+    if (promo.active) {
+      installments = Math.min(installments, promo.maxInstallments);
+    } else if (forceCouponTwo) {
+      installments = 2;
+    }
+    if (installments < 1) installments = 1;
+    // El descuento del 10% aplica solo al plan de 3 cuotas (y nunca durante la promo).
+    const cuotasFactor = !promo.active && installments === 3 ? 0.9 : 1;
 
     let subtotal = 0;
     let total = 0;

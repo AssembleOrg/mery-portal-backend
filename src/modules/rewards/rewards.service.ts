@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../shared/services';
 import { RewardEmailService } from './reward-email.service';
+import { SettingsService } from '../settings/settings.service';
 
 /** % del cupón-regalo que se emite en cada compra. */
 const REWARD_DISCOUNT_PERCENT = 20;
@@ -15,6 +16,7 @@ export class RewardsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: RewardEmailService,
+    private readonly settings: SettingsService,
   ) {}
 
   private async uniqueCode(prefix: string): Promise<string> {
@@ -39,6 +41,11 @@ export class RewardsService {
     userId: string,
     courseNames: string[] = [],
   ): Promise<{ code: string } | null> {
+    // Toggle: por ahora el cupón-regalo por compra está apagado.
+    if (!(await this.settings.isPurchaseRewardActive())) {
+      return null;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, email: true, firstName: true },

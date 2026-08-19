@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../../shared/services';
 import {
   CHAT_LIFETIME_DAYS_KEY,
+  CHECKOUT_PROMO_ACTIVE_KEY,
+  CHECKOUT_PROMO_DISCOUNT_KEY,
+  CHECKOUT_PROMO_MAX_INSTALLMENTS_KEY,
+  REWARDS_PURCHASE_COUPON_ACTIVE_KEY,
   getSettingDefinition,
   SETTING_DEFINITIONS,
   SettingDefinition,
@@ -83,6 +87,34 @@ export class SettingsService {
   async getChatLifetimeDays(): Promise<number> {
     const days = await this.getNumber(CHAT_LIFETIME_DAYS_KEY);
     return days > 0 ? days : 30;
+  }
+
+  async getBoolean(key: string): Promise<boolean> {
+    const def = getSettingDefinition(key)!;
+    return this.parse(def, await this.getRaw(key)) as boolean;
+  }
+
+  /** Promo global fija (descuento sin cupón + tope de cuotas). */
+  async getCheckoutPromo(): Promise<{
+    active: boolean;
+    discountPercent: number;
+    maxInstallments: number;
+  }> {
+    const [active, discountPercent, maxInstallments] = await Promise.all([
+      this.getBoolean(CHECKOUT_PROMO_ACTIVE_KEY),
+      this.getNumber(CHECKOUT_PROMO_DISCOUNT_KEY),
+      this.getNumber(CHECKOUT_PROMO_MAX_INSTALLMENTS_KEY),
+    ]);
+    return {
+      active,
+      discountPercent: Math.max(0, Math.min(100, discountPercent)),
+      maxInstallments: maxInstallments > 0 ? maxInstallments : 2,
+    };
+  }
+
+  /** ¿Se emite el cupón-regalo del 20% al confirmar una compra? */
+  async isPurchaseRewardActive(): Promise<boolean> {
+    return this.getBoolean(REWARDS_PURCHASE_COUPON_ACTIVE_KEY);
   }
 
   /** Todas las settings conocidas con su valor actual (para el panel admin). */

@@ -1,7 +1,7 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards';
-import { CurrentUser } from '../../shared/decorators';
+import { CurrentUser, Public } from '../../shared/decorators';
 import type { JwtPayload } from '../../shared/types';
 import { CheckoutService } from './checkout.service';
 import { QuoteDto } from './dto/quote.dto';
@@ -12,6 +12,13 @@ import { QuoteDto } from './dto/quote.dto';
 @UseGuards(JwtAuthGuard)
 export class CheckoutController {
   constructor(private readonly checkout: CheckoutService) {}
+
+  /** Estado de la promo global (público, para reflejarla en el catálogo/checkout). */
+  @Public()
+  @Get('promo')
+  getPromo() {
+    return this.checkout.getPromo();
+  }
 
   /**
    * Devuelve los line-items con precios AUTORITATIVOS (calculados en el backend
