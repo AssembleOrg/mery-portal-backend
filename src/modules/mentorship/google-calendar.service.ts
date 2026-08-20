@@ -21,14 +21,18 @@ const TZ = 'America/Argentina/Buenos_Aires';
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
 /**
- * Google Calendar (+ Google Meet) sobre cursos@merygarcia.com.ar mediante un
- * service account con domain-wide delegation (siempre activo, sin OAuth).
+ * Google Calendar (+ Google Meet). Dos modos de autenticación:
  *
- * Env:
- *   GOOGLE_SERVICE_ACCOUNT_JSON  — JSON de la clave del service account (string), o
- *   GOOGLE_SERVICE_ACCOUNT_PATH  — path al archivo JSON
- *   GOOGLE_CALENDAR_IMPERSONATE  — cuenta a impersonar (default cursos@merygarcia.com.ar)
- *   GOOGLE_CALENDAR_ID           — calendario destino (default 'primary')
+ * 1) OAuth (cuenta central con refresh token) — NO requiere ser admin de
+ *    Workspace. La cuenta (ej. charly@pistech.net) organiza el evento e invita
+ *    a cursos@ + el alumno. Recomendado si no hay domain-wide delegation.
+ *    Env: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET,
+ *         GOOGLE_OAUTH_REFRESH_TOKEN
+ *
+ * 2) Service account con domain-wide delegation (impersona una cuenta Workspace).
+ *    Env: GOOGLE_SERVICE_ACCOUNT_JSON (o _PATH) + GOOGLE_CALENDAR_IMPERSONATE
+ *
+ * Común: GOOGLE_CALENDAR_ID (default 'primary' = calendario de la cuenta central).
  *
  * Si no hay credenciales, es un no-op: la reserva funciona igual (sin evento).
  * Ningún método lanza: ante error loguea y devuelve null para no romper el flujo.
@@ -52,8 +56,16 @@ export class GoogleCalendarService {
     return this.config.get<string>('GOOGLE_CALENDAR_ID') || 'primary';
   }
 
+  private get oauthCreds(): { id: string; secret: string; refresh: string } | null {
+    const id = this.config.get<string>('GOOGLE_OAUTH_CLIENT_ID');
+    const secret = this.config.get<string>('GOOGLE_OAUTH_CLIENT_SECRET');
+    const refresh = this.config.get<string>('GOOGLE_OAUTH_REFRESH_TOKEN');
+    return id && secret && refresh ? { id, secret, refresh } : null;
+  }
+
   get configured(): boolean {
     return !!(
+      this.oauthCreds ||
       this.config.get<string>('GOOGLE_SERVICE_ACCOUNT_JSON') ||
       this.config.get<string>('GOOGLE_SERVICE_ACCOUNT_PATH')
     );
@@ -85,21 +97,33 @@ export class GoogleCalendarService {
   private getClient(): calendar_v3.Calendar | null {
     if (this.clientTried) return this.client;
     this.clientTried = true;
-    const creds = this.loadCredentials();
-    if (!creds) {
-      this.logger.warn(
-        'Google Calendar no configurado — las mentorías no crean evento',
-      );
-      return null;
+
+    // 1) OAuth con cuenta central (refresh token) — no requiere admin de Workspace.
+    const oauth = this.oauthCreds;
+    if (oauth) {
+      const client = new google.auth.OAuth2(oauth.id, oauth.secret);
+      client.setCredentials({ refresh_token: oauth.refresh });
+      this.client = google.calendar({ version: 'v3', auth: client });
+      return this.client;
     }
-    const auth = new google.auth.JWT({
-      email: creds.client_email,
-      key: creds.private_key,
-      scopes: SCOPES,
-      subject: this.impersonate, // domain-wide delegation
-    });
-    this.client = google.calendar({ version: 'v3', auth });
-    return this.client;
+
+    // 2) Service account con domain-wide delegation.
+    const creds = this.loadCredentials();
+    if (creds) {
+      const auth = new google.auth.JWT({
+        email: creds.client_email,
+        key: creds.private_key,
+        scopes: SCOPES,
+        subject: this.impersonate,
+      });
+      this.client = google.calendar({ version: 'v3', auth });
+      return this.client;
+    }
+
+    this.logger.warn(
+      'Google Calendar no configurado — las mentorías no crean evento',
+    );
+    return null;
   }
 
   private meetLinkOf(event: calendar_v3.Schema$Event | undefined): string | null {

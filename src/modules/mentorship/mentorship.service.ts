@@ -376,14 +376,16 @@ export class MentorshipService {
       where: { id: categoryId },
       select: { name: true },
     });
-    const impersonate =
-      process.env.GOOGLE_CALENDAR_IMPERSONATE || 'cursos@merygarcia.com.ar';
+    // Email de la mentora que se invita SIEMPRE (independiente de quién organiza
+    // el evento: cuenta central OAuth o service account impersonado).
+    const mentorEmail =
+      process.env.GOOGLE_MENTOR_EMAIL || 'cursos@merygarcia.com.ar';
     const res = await this.calendar.createEvent({
       summary: `Mentoría — ${category?.name ?? 'Curso'}`,
       description: 'Mentoría de Mery Garcia.',
       start: slot.start,
       end: slot.end,
-      attendeeEmails: [impersonate, meetingEmail.trim().toLowerCase()],
+      attendeeEmails: [mentorEmail, meetingEmail.trim().toLowerCase()],
     });
     if (res) {
       await this.prisma.mentorship.update({
@@ -401,7 +403,7 @@ export class MentorshipService {
       start: slot.start,
       end: slot.end,
       attendeeEmails: [
-        process.env.GOOGLE_CALENDAR_IMPERSONATE || 'cursos@merygarcia.com.ar',
+        process.env.GOOGLE_MENTOR_EMAIL || 'cursos@merygarcia.com.ar',
         m.meetingEmail,
       ],
     });
