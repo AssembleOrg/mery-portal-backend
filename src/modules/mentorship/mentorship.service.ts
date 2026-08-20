@@ -9,6 +9,7 @@ import {
 import { MentorshipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/services';
 import { GoogleCalendarService } from './google-calendar.service';
+import { MentorshipEmailService } from './mentorship-email.service';
 import {
   BookMentorshipDto,
   CreateAvailabilityDto,
@@ -37,7 +38,38 @@ export class MentorshipService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly calendar: GoogleCalendarService,
+    private readonly email: MentorshipEmailService,
   ) {}
+
+  /** Aviso a los admins (no bloquea el flujo si falla). */
+  private async notifyAdmins(
+    mentorshipId: string,
+    action: 'reservó' | 'reprogramó' | 'canceló',
+  ) {
+    try {
+      const m = await this.prisma.mentorship.findUnique({
+        where: { id: mentorshipId },
+        include: {
+          user: { select: { firstName: true, lastName: true, email: true } },
+          category: { select: { name: true } },
+        },
+      });
+      if (!m) return;
+      const studentName =
+        [m.user.firstName, m.user.lastName].filter(Boolean).join(' ').trim() ||
+        m.user.email;
+      await this.email.notifyAdmins({
+        studentName,
+        studentEmail: m.user.email,
+        courseName: m.category.name,
+        start: m.scheduledStart,
+        meetLink: m.googleMeetLink,
+        action,
+      });
+    } catch (err) {
+      this.logger.warn(`No se pudo avisar a admins: ${(err as Error).message}`);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Helpers de fecha (zona horaria Argentina, sin DST)
@@ -274,6 +306,7 @@ export class MentorshipService {
         },
       });
       await this.attachCalendarEvent(mentorship.id, slot, dto.meetingEmail, categoryId);
+      await this.notifyAdmins(mentorship.id, 'reservó');
       return this.serialize(await this.byId(mentorship.id));
     } catch (err) {
       // Índices únicos parciales: race condition o mentoría ya existente.
@@ -330,6 +363,7 @@ export class MentorshipService {
     }
 
     await this.updateCalendarEvent(mentorshipId, slot);
+    await this.notifyAdmins(mentorshipId, 'reprogramó');
     return this.serialize(await this.byId(mentorshipId));
   }
 
@@ -350,6 +384,7 @@ export class MentorshipService {
     if (mentorship.googleEventId) {
       await this.calendar.deleteEvent(mentorship.googleEventId);
     }
+    await this.notifyAdmins(mentorshipId, 'canceló');
     return { cancelled: true };
   }
 
