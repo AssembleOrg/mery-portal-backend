@@ -57,6 +57,7 @@
     "cookie-parser": "^1.4.7",
     "crypto": "^1.0.1",
     "express-rate-limit": "^8.1.0",
+    "googleapis": "^176.0.0",
     "helmet": "^8.1.0",
     "luxon": "^3.7.2",
     "passport": "^0.7.0",
