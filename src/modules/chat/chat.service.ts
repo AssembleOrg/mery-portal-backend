@@ -69,6 +69,8 @@ export class ChatService {
     purchaseActive: boolean;
     quizRequired: boolean;
     quizPassed: boolean;
+    mentorshipRequired: boolean;
+    mentorshipCompleted: boolean;
   }> {
     const now = new Date();
     const purchase = await this.prisma.categoryPurchase.findUnique({
@@ -107,6 +109,13 @@ export class ChatService {
       ? Math.round((videosCompleted / videosTotal) * 100)
       : 0;
 
+    // Mentoría cumplida (COMPLETED) para este curso: requisito para abrir el chat.
+    const mentorshipCompleted =
+      (await this.prisma.mentorship.findFirst({
+        where: { userId, categoryId, status: 'COMPLETED' },
+        select: { id: true },
+      })) !== null;
+
     // Sin compra → no debería ni existir la sala
     if (!purchase) {
       return {
@@ -118,17 +127,19 @@ export class ChatService {
         purchaseActive: false,
         quizRequired,
         quizPassed,
+        mentorshipRequired: true,
+        mentorshipCompleted,
       };
     }
 
-    // Gate de apertura: 95% de progreso en todos los videos + examen aprobado
-    // (si la categoría lo exige). El vencimiento por vida del chat (30 días) lo
-    // resuelve ensureRoom usando la fecha real de desbloqueo (unlockedAt) de la
-    // sala, no la expiración de la compra.
+    // Gate de apertura: 95% de progreso + examen aprobado (si aplica) + haber
+    // tenido la mentoría del curso. El vencimiento por vida del chat (30 días)
+    // lo resuelve ensureRoom con la fecha real de desbloqueo (unlockedAt).
     const gateMet =
       videosTotal > 0 &&
       videosCompleted === videosTotal &&
-      (!quizRequired || quizPassed);
+      (!quizRequired || quizPassed) &&
+      mentorshipCompleted;
     return {
       status: gateMet ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
       gracePeriodEnd: null,
@@ -138,6 +149,8 @@ export class ChatService {
       purchaseActive: purchase.isActive,
       quizRequired,
       quizPassed,
+      mentorshipRequired: true,
+      mentorshipCompleted,
     };
   }
 

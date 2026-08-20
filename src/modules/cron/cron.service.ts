@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../shared/services';
 import { CouponsService } from '../coupons/coupons.service';
 import { ChatService } from '../chat/chat.service';
+import { MentorshipService } from '../mentorship/mentorship.service';
 
 @Injectable()
 export class CronService {
@@ -12,6 +13,7 @@ export class CronService {
     private readonly prisma: PrismaService,
     private readonly couponsService: CouponsService,
     private readonly chatService: ChatService,
+    private readonly mentorshipService: MentorshipService,
   ) {}
 
   /**
@@ -192,6 +194,26 @@ export class CronService {
       }
     } catch (error) {
       this.logger.error('❌ [CRON] Error recomputando estados de chat:', error);
+    }
+  }
+
+  /**
+   * Marca como cumplidas las mentorías cuyo horario ya pasó. Al quedar
+   * COMPLETED, el chat del curso se activa (al recomputar / al abrirlo).
+   * Cada 15 minutos.
+   */
+  @Cron(CronExpression.EVERY_30_MINUTES, {
+    name: 'complete-past-due-mentorships',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async completeMentorships() {
+    try {
+      const { completed } = await this.mentorshipService.completePastDue();
+      if (completed > 0) {
+        this.logger.log(`🎓 [CRON] ${completed} mentoría(s) marcadas como cumplidas`);
+      }
+    } catch (error) {
+      this.logger.error('❌ [CRON] Error completando mentorías:', error);
     }
   }
 }

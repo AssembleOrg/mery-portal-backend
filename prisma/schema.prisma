@@ -49,6 +49,7 @@ model User {
   quizAttempts      QuizAttempt[]
   chatTokenEvents   ChatTokenEvent[]   @relation("ChatTokenEventAdmin")
   coupons           Coupon[]           @relation("UserCoupons")
+  mentorships       Mentorship[]
 
   // Audit fields
   createdAt DateTime  @default(now())
@@ -117,6 +118,7 @@ model VideoCategory {
   coupons      CouponCategory[]
   chatRooms    ChatRoom[]
   quizAttempts QuizAttempt[]
+  mentorships  Mentorship[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -372,6 +374,59 @@ model CouponConsumption {
 
   @@index([status, expiresAt])
   @@map("coupon_consumptions")
+}
+
+// ============================================================================
+// MENTORÍAS
+// ============================================================================
+
+enum MentorshipStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+/// Plantilla de disponibilidad semanal para mentorías (editable desde admin).
+/// weekday: 0=Domingo … 1=Lunes … 6=Sábado. start/end en minutos desde 00:00.
+model MentorshipAvailability {
+  id        String   @id @default(cuid())
+  weekday   Int
+  startMin  Int
+  endMin    Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("mentorship_availability")
+}
+
+/// Reserva de mentoría (una por curso aprobado). Un solo alumno por horario
+/// (índice único parcial en la migración). Al pasar el horario → COMPLETED
+/// (cron) y recién ahí se activa el chat del curso.
+model Mentorship {
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  scheduledStart  DateTime
+  scheduledEnd    DateTime
+  status          MentorshipStatus @default(SCHEDULED)
+  rescheduleCount Int              @default(0) // máximo 1 reprogramación
+
+  meetingEmail   String // email elegido para la meet (default = email logueado)
+  googleEventId  String?
+  googleMeetLink String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([scheduledStart])
+  @@index([status])
+  @@map("mentorships")
 }
 
 // ============================================================================
