@@ -10,6 +10,7 @@ import { MentorshipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/services';
 import { GoogleCalendarService } from './google-calendar.service';
 import { MentorshipEmailService } from './mentorship-email.service';
+import { ChatGateway } from '../chat/chat.gateway';
 import {
   BookMentorshipDto,
   CreateAvailabilityDto,
@@ -39,6 +40,7 @@ export class MentorshipService {
     private readonly prisma: PrismaService,
     private readonly calendar: GoogleCalendarService,
     private readonly email: MentorshipEmailService,
+    private readonly gateway: ChatGateway,
   ) {}
 
   /** Aviso a los admins (no bloquea el flujo si falla). */
@@ -65,6 +67,19 @@ export class MentorshipService {
         start: m.scheduledStart,
         meetLink: m.googleMeetLink,
         action,
+      });
+      // Notificación in-app (WebSocket) a los admins conectados.
+      const typeByAction = {
+        reservó: 'booked',
+        reprogramó: 'rescheduled',
+        canceló: 'cancelled',
+      } as const;
+      this.gateway.broadcastMentorshipEvent({
+        type: typeByAction[action],
+        mentorshipId: m.id,
+        studentName,
+        courseName: m.category.name,
+        start: m.scheduledStart.toISOString(),
       });
     } catch (err) {
       this.logger.warn(`No se pudo avisar a admins: ${(err as Error).message}`);

@@ -260,6 +260,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`room:${roomId}`).emit('room_status_changed', { roomId, status });
   }
 
+  /** Notificación in-app a los admins sobre una mentoría (agendar/reprogramar/cancelar). */
+  broadcastMentorshipEvent(payload: {
+    type: 'booked' | 'rescheduled' | 'cancelled';
+    mentorshipId: string;
+    studentName: string;
+    courseName: string;
+    start: string;
+  }) {
+    if (!this.server) return;
+    this.server.to('admins').emit('mentorship_event', payload);
+  }
+
   // --------------------------------------------------------------------------
   // Utils
   // --------------------------------------------------------------------------

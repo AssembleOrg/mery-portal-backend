@@ -5,9 +5,10 @@ import { MentorshipService } from './mentorship.service';
 import { GoogleCalendarService } from './google-calendar.service';
 import { MentorshipEmailService } from './mentorship-email.service';
 import { PrismaService } from '../../shared/services';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, ChatModule],
   controllers: [MentorshipController],
   providers: [
     MentorshipService,
