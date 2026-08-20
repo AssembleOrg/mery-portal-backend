@@ -81,6 +81,31 @@ export class MentorshipController {
     return this.mentorship.listAdmin({ from, to, status });
   }
 
+  @Get('admin/slots')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  adminSlots() {
+    // Admin ve todas las franjas futuras (sin el cutoff de 3 días).
+    return this.mentorship.availableSlots(false);
+  }
+
+  @Post('admin/:id/cancel')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  adminCancel(@Param('id') id: string) {
+    return this.mentorship.adminCancel(id);
+  }
+
+  @Post('admin/:id/reschedule')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  adminReschedule(
+    @Param('id') id: string,
+    @Body() dto: RescheduleMentorshipDto,
+  ) {
+    return this.mentorship.adminReschedule(id, dto.start);
+  }
+
   @Get('admin/availability')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUBADMIN)

@@ -188,12 +188,12 @@ export class MentorshipService {
    * Horarios disponibles: futuros, dentro de la anticipación y sin reserva
    * vigente. Devuelve la lista con el flag `available` para reflejar los ocupados.
    */
-  async availableSlots(): Promise<
-    Array<{ start: string; end: string; available: boolean }>
-  > {
+  async availableSlots(
+    enforceCutoff = true,
+  ): Promise<Array<{ start: string; end: string; available: boolean }>> {
     const now = new Date();
     const slots = (await this.generateSlots()).filter((s) =>
-      this.passesCutoff(s.start, now),
+      enforceCutoff ? this.passesCutoff(s.start, now) : s.start > now,
     );
     if (slots.length === 0) return [];
 
@@ -262,17 +262,23 @@ export class MentorshipService {
   // Reserva / reprogramación / cancelación
   // ---------------------------------------------------------------------------
 
-  private async findMatchingSlot(startIso: string): Promise<Slot> {
+  private async findMatchingSlot(
+    startIso: string,
+    enforceCutoff = true,
+  ): Promise<Slot> {
     const startMs = new Date(startIso).getTime();
     const slots = await this.generateSlots();
     const match = slots.find((s) => s.start.getTime() === startMs);
     if (!match) {
       throw new BadRequestException('El horario elegido no es válido');
     }
-    if (!this.passesCutoff(match.start, new Date())) {
+    if (enforceCutoff && !this.passesCutoff(match.start, new Date())) {
       throw new BadRequestException(
         'Ese horario ya no se puede reservar (hay que hacerlo con al menos 3 días de anticipación)',
       );
+    }
+    if (!enforceCutoff && match.start <= new Date()) {
+      throw new BadRequestException('El horario ya pasó');
     }
     return match;
   }
@@ -386,6 +392,51 @@ export class MentorshipService {
     }
     await this.notifyAdmins(mentorshipId, 'canceló');
     return { cancelled: true };
+  }
+
+  /** Cancelación por admin (sin ventana de 72h, sin chequeo de propiedad). */
+  async adminCancel(mentorshipId: string) {
+    const m = await this.byId(mentorshipId);
+    if (m.status !== MentorshipStatus.SCHEDULED) {
+      throw new BadRequestException('La mentoría no está agendada');
+    }
+    await this.prisma.mentorship.update({
+      where: { id: mentorshipId },
+      data: { status: MentorshipStatus.CANCELLED },
+    });
+    if (m.googleEventId) {
+      await this.calendar.deleteEvent(m.googleEventId);
+    }
+    return { cancelled: true };
+  }
+
+  /**
+   * Reprogramación por admin: ignora la ventana de 72h y el cutoff de 3 días,
+   * y NO consume el reagende del alumno (rescheduleCount). El horario debe ser
+   * una franja válida y futura; el cupo se protege igual con el índice único.
+   */
+  async adminReschedule(mentorshipId: string, startIso: string) {
+    const m = await this.byId(mentorshipId);
+    if (m.status !== MentorshipStatus.SCHEDULED) {
+      throw new BadRequestException('La mentoría no está agendada');
+    }
+    const slot = await this.findMatchingSlot(startIso, false);
+    try {
+      await this.prisma.mentorship.update({
+        where: { id: mentorshipId },
+        data: { scheduledStart: slot.start, scheduledEnd: slot.end },
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException('Ese horario ya está ocupado. Elegí otro.');
+      }
+      throw err;
+    }
+    await this.updateCalendarEvent(mentorshipId, slot);
+    return this.serialize(await this.byId(mentorshipId));
   }
 
   private assertChangeWindow(start: Date) {
