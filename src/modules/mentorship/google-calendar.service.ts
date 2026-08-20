@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { google, calendar_v3 } from 'googleapis';
+import { calendar as calendarApi, auth as googleAuth, calendar_v3 } from '@googleapis/calendar';
 
 export interface CalendarEventInput {
   summary: string;
@@ -101,22 +101,22 @@ export class GoogleCalendarService {
     // 1) OAuth con cuenta central (refresh token) — no requiere admin de Workspace.
     const oauth = this.oauthCreds;
     if (oauth) {
-      const client = new google.auth.OAuth2(oauth.id, oauth.secret);
+      const client = new googleAuth.OAuth2(oauth.id, oauth.secret);
       client.setCredentials({ refresh_token: oauth.refresh });
-      this.client = google.calendar({ version: 'v3', auth: client });
+      this.client = calendarApi({ version: 'v3', auth: client });
       return this.client;
     }
 
     // 2) Service account con domain-wide delegation.
     const creds = this.loadCredentials();
     if (creds) {
-      const auth = new google.auth.JWT({
+      const jwt = new googleAuth.JWT({
         email: creds.client_email,
         key: creds.private_key,
         scopes: SCOPES,
         subject: this.impersonate,
       });
-      this.client = google.calendar({ version: 'v3', auth });
+      this.client = calendarApi({ version: 'v3', auth: jwt });
       return this.client;
     }
 
