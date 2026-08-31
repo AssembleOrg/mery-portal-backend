@@ -116,8 +116,19 @@ export class QuizService {
     };
   }
 
+  /** Mezcla (Fisher-Yates) sobre una copia — no muta la definición. */
+  private shuffle<T>(arr: readonly T[]): T[] {
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
   /**
-   * Preguntas para el frontend: solo id + texto, nunca la respuesta correcta.
+   * Preguntas para el frontend: solo id + texto (nunca la respuesta correcta),
+   * en orden mezclado en cada apertura del examen.
    */
   async getQuestions(userId: string, categoryId: string, role: UserRole) {
     const category = await this.resolveCategory(categoryId);
@@ -126,7 +137,10 @@ export class QuizService {
     return {
       required: true as const,
       maxWrong: def.maxWrong,
-      questions: def.questions.map((q) => ({ id: q.id, text: q.text })),
+      questions: this.shuffle(def.questions).map((q) => ({
+        id: q.id,
+        text: q.text,
+      })),
       status: await this.getStatus(userId, categoryId),
     };
   }
