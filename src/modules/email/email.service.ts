@@ -17,7 +17,7 @@ export class EmailService {
 
   async sendVerificationEmail(
     email: string,
-    name: string, 
+    name: string,
     verificationToken: string,
   ): Promise<void> {
     const verificationUrl = `${this.configService.get<string>('FRONTEND_URL')}/es/verify-email?token=${verificationToken}`;
@@ -25,17 +25,26 @@ export class EmailService {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
       name: 'Mery Garcia - Cosmetic Tattoo',
-      email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
     };
     sendSmtpEmail.to = [{ email, name }];
     sendSmtpEmail.subject = 'Verifica tu correo electrónico - Mery Garcia';
-    sendSmtpEmail.htmlContent = this.getVerificationEmailTemplate(name, verificationUrl);
+    sendSmtpEmail.htmlContent = this.getVerificationEmailTemplate(
+      name,
+      verificationUrl,
+    );
 
     try {
       await this.apiInstance.sendTransacEmail(sendSmtpEmail);
       this.logger.log(`Verification email sent to ${email}`);
     } catch (error) {
-      this.logger.error(`Failed to send verification email to ${email}:`, error);
+      this.logger.error(
+        `Failed to send verification email to ${email}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -50,17 +59,26 @@ export class EmailService {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
       name: 'Mery Garcia - Cosmetic Tattoo',
-      email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
     };
     sendSmtpEmail.to = [{ email, name }];
     sendSmtpEmail.subject = 'Restablece tu contraseña - Mery Garcia';
-    sendSmtpEmail.htmlContent = this.getPasswordResetEmailTemplate(name, resetUrl);
+    sendSmtpEmail.htmlContent = this.getPasswordResetEmailTemplate(
+      name,
+      resetUrl,
+    );
 
     try {
       await this.apiInstance.sendTransacEmail(sendSmtpEmail);
       this.logger.log(`Password reset email sent to ${email}`);
     } catch (error) {
-      this.logger.error(`Failed to send password reset email to ${email}:`, error);
+      this.logger.error(
+        `Failed to send password reset email to ${email}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -75,17 +93,28 @@ export class EmailService {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
       name: 'Mery Garcia - Cosmetic Tattoo',
-      email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
     };
     sendSmtpEmail.to = [{ email, name }];
     sendSmtpEmail.subject = 'Bienvenida - Tu contraseña temporal - Mery Garcia';
-    sendSmtpEmail.htmlContent = this.getTemporaryPasswordEmailTemplate(name, email, temporaryPassword, loginUrl);
+    sendSmtpEmail.htmlContent = this.getTemporaryPasswordEmailTemplate(
+      name,
+      email,
+      temporaryPassword,
+      loginUrl,
+    );
 
     try {
       await this.apiInstance.sendTransacEmail(sendSmtpEmail);
       this.logger.log(`Temporary password email sent to ${email}`);
     } catch (error) {
-      this.logger.error(`Failed to send temporary password email to ${email}:`, error);
+      this.logger.error(
+        `Failed to send temporary password email to ${email}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -100,17 +129,27 @@ export class EmailService {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
       name: 'Mery Garcia - Cosmetic Tattoo',
-      email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
     };
     sendSmtpEmail.to = [{ email, name }];
     sendSmtpEmail.subject = 'Tu contraseña ha sido cambiada - Mery Garcia';
-    sendSmtpEmail.htmlContent = this.getPasswordChangedEmailTemplate(name, loginUrl, supportUrl);
+    sendSmtpEmail.htmlContent = this.getPasswordChangedEmailTemplate(
+      name,
+      loginUrl,
+      supportUrl,
+    );
 
     try {
       await this.apiInstance.sendTransacEmail(sendSmtpEmail);
       this.logger.log(`Password changed notification sent to ${email}`);
     } catch (error) {
-      this.logger.error(`Failed to send password changed notification to ${email}:`, error);
+      this.logger.error(
+        `Failed to send password changed notification to ${email}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -131,7 +170,10 @@ export class EmailService {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
       name: 'Mery Garcia - Autostyling',
-      email: this.configService.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
     };
     sendSmtpEmail.to = [{ email, name }];
     sendSmtpEmail.subject = `Es oficial: tu lugar en ${opts.eventTitle} está reservado`;
@@ -141,13 +183,88 @@ export class EmailService {
       await this.apiInstance.sendTransacEmail(sendSmtpEmail);
       this.logger.log(`Event invitation email sent to ${email}`);
     } catch (error) {
-      this.logger.error(`Failed to send event invitation email to ${email}:`, error);
+      this.logger.error(
+        `Failed to send event invitation email to ${email}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Campaña de marketing #FormacionesMG (40% OFF + técnica de Refill).
+   * Un destinatario por llamada (Brevo transactional). Para la prueba de
+   * aprobación se envía a un solo mail; el broadcast a la lista de clientas
+   * es una segunda etapa (requiere opt-in/unsubscribe).
+   */
+  async sendFormacionesCampaignEmail(
+    email: string,
+    name: string,
+  ): Promise<void> {
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.sender = {
+      name: 'Mery Garcia - Cosmetic Tattoo',
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
+    };
+    sendSmtpEmail.to = [{ email, name }];
+    sendSmtpEmail.subject =
+      'LAST CALL 🔥 #MGCELEBRATION 💣 40% OFF + Formaciones 100% renovadas 🚀';
+    sendSmtpEmail.htmlContent = this.getFormacionesCampaignTemplate(name);
+
+    try {
+      await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      this.logger.log(`Formaciones campaign email sent to ${email}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send formaciones campaign email to ${email}:`,
+        error,
+      );
       throw error;
     }
   }
 
   private static readonly LOGO_URL =
     'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/merygarcia_brow_artist_gris_transparente_centrado_clean.png';
+
+  // Imágenes de la campaña, alojadas en el CDN. Se distribuyen a lo largo del mail.
+  private static readonly CAMPAIGN_IMAGES: ReadonlyArray<string> = [
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/home-1.webp',
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/home-8.webp',
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/WhatsApp%20Image%202026-09-01%20at%203.54.05%20PM.jpeg',
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/WhatsApp%20Image%202026-09-01%20at%203.54.04%20PM.jpeg',
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/WhatsApp%20Image%202026-09-01%20at%203.59.20%20PM.jpeg',
+    'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/WhatsApp%20Image%202026-09-01%20at%203.59.19%20PM.jpeg',
+  ];
+
+  // Programas (PDF) de cada formación, alojados en el CDN. Se listan como links.
+  private static readonly CAMPAIGN_PDFS: ReadonlyArray<{
+    label: string;
+    url: string;
+  }> = [
+    {
+      label: 'Estilismo de Cejas',
+      url: 'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/pdf-formaciones/Estilismo%20CON%20precios%20(Mayo%202026).pdf',
+    },
+    {
+      label: 'Microblading',
+      url: 'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/pdf-formaciones/Microblading%20CON%20precios%20(Mayo%202026).pdf.pdf',
+    },
+    {
+      label: 'Nanoblading',
+      url: 'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/pdf-formaciones/Programa%20Nanoblading%20con%20precios%20(Mayo%202026)-2.pdf',
+    },
+    {
+      label: 'Lipblush',
+      url: 'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/pdf-formaciones/Programa%20Lipblush%20(mayo%202026).pdf',
+    },
+    {
+      label: 'Información de cursada',
+      url: 'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/pdf-formaciones/Informacio%CC%81n%20de%20cursada%20sin%20valores%20(Mayo%202026).pdf',
+    },
+  ];
 
   /** Dirección completa del local para que el pin de Maps caiga exacto. */
   private static readonly VENUE_FULL_ADDRESS =
@@ -200,7 +317,11 @@ export class EmailService {
 
   private getEventInvitationTemplate(
     name: string,
-    opts: { eventTitle: string; horario?: string | null; eventDetails?: string | null },
+    opts: {
+      eventTitle: string;
+      horario?: string | null;
+      eventDetails?: string | null;
+    },
   ): string {
     const rows: string[] = [];
 
@@ -316,7 +437,10 @@ export class EmailService {
     `;
   }
 
-  private getVerificationEmailTemplate(name: string, verificationUrl: string): string {
+  private getVerificationEmailTemplate(
+    name: string,
+    verificationUrl: string,
+  ): string {
     return `
       <!DOCTYPE html>
       <html lang="es">
@@ -442,7 +566,10 @@ export class EmailService {
     `;
   }
 
-  private getPasswordResetEmailTemplate(name: string, resetUrl: string): string {
+  private getPasswordResetEmailTemplate(
+    name: string,
+    resetUrl: string,
+  ): string {
     return `
       <!DOCTYPE html>
       <html lang="es">
@@ -988,6 +1115,196 @@ export class EmailService {
             </p>
           </div>
         </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Bloque de imagen para la campaña. Si la URL está vacía (foto aún no
+   * subida), renderiza un placeholder rotulado en vez de un <img> roto, para
+   * que el borrador se pueda revisar antes de tener las fotos definitivas.
+   */
+  /**
+   * Par de imágenes lado a lado (email-safe con tabla). Si se pasa fixedHeight,
+   * ambas se recortan (object-fit: cover) a esa altura para que queden parejas
+   * aunque tengan proporciones distintas.
+   */
+  private imagePair(urlA: string, urlB: string, fixedHeight?: number): string {
+    const imgStyle = fixedHeight
+      ? `display:block; width:100%; max-width:235px; height:${fixedHeight}px; object-fit:cover; border-radius:10px; border:0;`
+      : `display:block; width:100%; max-width:235px; height:auto; border-radius:10px; border:0;`;
+    const cell = (url: string) => `
+        <td width="50%" valign="top" style="padding:0 5px;">
+          <img src="${url}" alt="Mery García" width="235"${fixedHeight ? ` height="${fixedHeight}"` : ''} style="${imgStyle}">
+        </td>`;
+    return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>${cell(urlA)}${cell(urlB)}</tr>
+      </table>`;
+  }
+
+  /** Lista de programas (PDF) como filas de link con ícono. */
+  private pdfList(): string {
+    const rows = EmailService.CAMPAIGN_PDFS.map(
+      (pdf) => `
+        <tr>
+          <td style="padding:0;">
+            <a href="${pdf.url}" target="_blank" style="display:block; padding:16px 20px; margin-bottom:10px; background-color:#4a4a4a; border:1px solid rgba(255,255,255,0.2); border-radius:8px; color:#ffffff; font-size:15px; font-weight:600; text-decoration:none; font-family:'Helvetica Neue', Arial, sans-serif;">
+              📄&nbsp;&nbsp;${this.escapeHtml(pdf.label)}
+              <span style="float:right; color:#f9bbc4; font-weight:400;">Ver programa &rarr;</span>
+            </a>
+          </td>
+        </tr>`,
+    ).join('');
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`;
+  }
+
+  private getFormacionesCampaignTemplate(name: string): string {
+    const formacionesUrl = 'https://merygarcia.com.ar';
+
+    return `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>#MGCELEBRATION · 40% OFF</title>
+      </head>
+      <body style="margin:0; padding:0; background-color:#3a3a3a; font-family:'Helvetica Neue', Arial, sans-serif;">
+        <!-- Preheader (hidden) -->
+        <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#3a3a3a;">Nuestras Formaciones se renovaron: 2 módulos, meetings en vivo y la técnica de Refill. Y por tiempo limitado, 40% OFF.</div>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#3a3a3a; padding:40px 12px;">
+          <tr>
+            <td align="center">
+              <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#545454; border:1px solid rgba(255,255,255,0.35);">
+
+                <!-- Logo -->
+                <tr>
+                  <td style="padding:48px 40px 0; text-align:center;">
+                    <img src="https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/mery-blanco-logo.png" width="150" alt="Mery García" style="display:block; margin:0 auto; width:150px; max-width:60%; height:auto; border:0;">
+                  </td>
+                </tr>
+
+                <!-- Hero -->
+                <tr>
+                  <td style="padding:36px 48px 0; text-align:center;">
+                    <div style="color:#f9bbc4; font-size:11px; letter-spacing:4px; text-transform:uppercase; margin-bottom:16px;">#FormacionesMG</div>
+                    <div style="color:#ffffff; font-size:64px; line-height:1; font-weight:800; letter-spacing:-1px;">40% OFF</div>
+                    <div style="color:#ffffff; font-size:18px; margin-top:10px;">en todas las formaciones</div>
+                    <div style="display:inline-block; margin-top:18px; background-color:#f9bbc4; color:#2b2b2b; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; padding:8px 16px; border-radius:20px; font-weight:700;">Tiempo limitado Del 1 al 5 de Septiembre</div>
+                  </td>
+                </tr>
+
+                <!-- CTA principal -->
+                <tr>
+                  <td style="padding:28px 48px 0; text-align:center;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                      <tr>
+                        <td align="center" style="background-color:#f9bbc4; border-radius:6px;">
+                          <a href="${formacionesUrl}" target="_blank" style="display:inline-block; padding:15px 44px; color:#2b2b2b; font-size:15px; letter-spacing:1px; text-transform:uppercase; text-decoration:none; font-weight:700;">Ver formaciones</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Imágenes 1-2 -->
+                <tr>
+                  <td style="padding:36px 51px 0;">
+                    ${this.imagePair(EmailService.CAMPAIGN_IMAGES[0], EmailService.CAMPAIGN_IMAGES[1], 280)}
+                  </td>
+                </tr>
+
+                <!-- Bullets (texto exacto mail1) -->
+                <tr>
+                  <td style="padding:30px 56px 0; color:#ffffff; font-size:15px; line-height:1.75;">
+                    <p style="margin:0 0 16px;">Nuestra carrera cuenta con 2 módulos: <strong>Estilismo de Cejas</strong>: Mód. I y <strong>Microblading</strong>: Mód. II (los mismos son correlativos).</p>
+                    <p style="margin:0 0 16px;">Cada Formación incluye el acceso a <strong>2 Meetings Online</strong>, que conforman nuestro cronograma de cursada, en las que podrás ver servicios en vivo, presentar tus prácticas y resolver todas tus dudas con nuestra #BrowBoss Mery García 🔥</p>
+                    <p style="margin:0;">Además, nos complace anunciar que la técnica de <strong>Refill</strong> estará disponible para que puedan acceder y perfeccionarse todas nuestras colegas ESTILISTAS DE CEJAS tanto en nuestras Formaciones como fuera del programa principal, con la exclusiva técnica creada por nuestra #BrowBoss Mery García 💣</p>
+                  </td>
+                </tr>
+
+                <!-- Puente (copy #MGCELEBRATION) -->
+                <tr>
+                  <td style="padding:30px 56px 0; text-align:center;">
+                    <p style="margin:0 0 20px; color:#f9bbc4; font-size:19px; line-height:1.5; font-weight:700;">¿Lista para sumarte a nuestro Universo? 🚀</p>
+                    <p style="margin:0 0 20px; color:#ffffff; font-size:17px; line-height:1.55; font-weight:700;"><span style="display:inline-block; background-color:#f9bbc4; color:#2b2b2b; font-size:15px; letter-spacing:0.5px; padding:4px 12px; border-radius:4px;">Del 1/9 al 5/9</span><br><span style="display:inline-block; margin-top:10px;">TODAS nuestras formaciones tienen <strong>40% OFF</strong> y <strong>2 cuotas sin interés</strong></span></p>
+                    <p style="margin:0 0 16px; color:#e6e6e6; font-size:15px; line-height:1.75;">para seguir creciendo y llevando tu trabajo a otro nivel.</p>
+                    <p style="margin:0 0 16px; color:#e6e6e6; font-size:15px; line-height:1.75;"><strong style="color:#ffffff;">GREAT NEWS!</strong> Las formaciones incluyen una <strong style="color:#ffffff;">Mentoria personalizada online free (1 hora) con nuestros Brow Boss</strong> por cada curso, exámenes teóricos para fijar conceptos y un chat de consulta con MG (por tiempo limitado).</p>
+                    <p style="margin:0 0 16px; color:#e6e6e6; font-size:15px; line-height:1.75;">En los siguientes enlaces podrás conocer nuestra propuesta pedagógica, contenidos de cada formación y valores de mentorías adicionales y espacios de presencialidad ONE TO ONE 🔥</p>
+                    <p style="margin:0; color:#f9bbc4; font-size:15px; line-height:1.6; font-weight:600;">Conocé todas nuestras propuestas para seguir llenando la Galaxia de cejas #ByMeryGarcia ✨</p>
+                  </td>
+                </tr>
+
+                <!-- Imágenes 3-4 -->
+                <tr>
+                  <td style="padding:30px 51px 0;">
+                    ${this.imagePair(EmailService.CAMPAIGN_IMAGES[2], EmailService.CAMPAIGN_IMAGES[3])}
+                  </td>
+                </tr>
+
+                <!-- Detalle Refill (texto exacto mail3) -->
+                <tr>
+                  <td style="padding:30px 56px 0; color:#ffffff; font-size:15px; line-height:1.75;">
+                    <p style="margin:0 0 16px;">Quienes hayan cursado/comprado #FormacionesMG a partir del 01/07/2023 en adelante, tendrán acceso directo a los contenidos actualizados (no es necesario volver a comprar), CON LA TÉCNICA DE REFILL INCLUIDA (SIN CARGO) 🔥</p>
+                    <p style="margin:0;">También, quienes cuenten con experiencia previa en Estilismo de Cejas (profesiones de cejas y maquilladoras) PUEDEN ADQUIRIR SOLO LA TÉCNICA DE REFILL (Práctica de diseño, paso a paso y video de teoría) ✨</p>
+                  </td>
+                </tr>
+
+                <!-- Imágenes 5-6 -->
+                <tr>
+                  <td style="padding:30px 51px 0;">
+                    ${this.imagePair(EmailService.CAMPAIGN_IMAGES[4], EmailService.CAMPAIGN_IMAGES[5], 280)}
+                  </td>
+                </tr>
+
+                <!-- Asesora académica -->
+                <tr>
+                  <td style="padding:44px 56px 0; text-align:center;">
+                    <p style="margin:0; color:#f9bbc4; font-size:15px; font-weight:700; line-height:1.6;">Para más detalles, podés contactarte con una asesora académica ❤️</p>
+                  </td>
+                </tr>
+
+                <!-- CTA final JOIN US -->
+                <tr>
+                  <td style="padding:36px 56px 0; text-align:center;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                      <tr>
+                        <td align="center" style="background-color:#f9bbc4; border-radius:6px;">
+                          <a href="${formacionesUrl}" target="_blank" style="display:inline-block; padding:18px 56px; color:#2b2b2b; font-size:24px; letter-spacing:2px; text-transform:uppercase; text-decoration:none; font-weight:800;">JOIN US!</a>
+                        </td>
+                      </tr>
+                    </table>
+                    <div style="margin-top:18px;">
+                      <a href="${formacionesUrl}" target="_blank" style="color:#f9bbc4; font-size:13px; text-decoration:none; border-bottom:1px solid rgba(249,187,196,0.5); padding-bottom:2px;">+ Información en nuestra web 🙎</a>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Programas (PDF) -->
+                <tr>
+                  <td style="padding:44px 56px 8px;">
+                    <div style="color:#f9bbc4; font-size:11px; letter-spacing:2.5px; text-transform:uppercase; text-align:center; margin-bottom:20px; font-family:'Helvetica Neue', Arial, sans-serif;">Descargá los programas</div>
+                    ${this.pdfList()}
+                  </td>
+                </tr>
+
+                <!-- Cierre -->
+                <tr>
+                  <td style="padding:52px 40px 52px; text-align:center; background-color:#2b2b2b;">
+                    <div style="color:#ffffff; font-size:26px; line-height:1.3; font-weight:700; font-family:Georgia, serif;">WE CAN'T WAIT<br>TO SEE YOU ⚡</div>
+                    <p style="margin:28px 0 0; color:#a8a8a8; font-size:11px; line-height:1.8; letter-spacing:0.3px;">
+                      © ${new Date().getFullYear()} Mery García · Todos los derechos reservados.
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
       </body>
       </html>
     `;
