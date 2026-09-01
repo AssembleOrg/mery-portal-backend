@@ -16,6 +16,13 @@ UPDATE "video_categories"
 SET "priceUSD" = "originalPriceUSD"
 WHERE "originalPriceUSD" IS NOT NULL;
 
+-- Carritos: volver a los precios de lista (evita mismatch con el quote)
+UPDATE "cart_items" ci
+SET "priceARS" = vc."priceARS",
+    "priceUSD" = vc."priceUSD"
+FROM "video_categories" vc
+WHERE ci."categoryId" = vc."id";
+
 -- Limpiar los snapshots (la promo terminó)
 UPDATE "video_categories"
 SET "originalPriceARS" = NULL,
