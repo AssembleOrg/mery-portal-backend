@@ -1,18 +1,109 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as SibApiV3Sdk from '@sendinblue/client';
+import { UserRole } from '@prisma/client';
+import { PrismaService } from '../../shared/services';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private apiInstance: SibApiV3Sdk.TransactionalEmailsApi;
+  private campaignInProgress = false;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {
     this.apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
     this.apiInstance.setApiKey(
       SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
       this.configService.get<string>('BREVO_API_KEY', ''),
     );
+  }
+
+  /**
+   * Devuelve una vista previa o ejecuta el envío de la campaña a clientes.
+   * El límite está acotado para que un error de configuración no genere un
+   * envío masivo accidental. El envío es secuencial para respetar la API de
+   * Brevo y poder informar destinatarios exitosos y fallidos.
+   */
+  async sendFormacionesCampaignToClients(params: {
+    limit: number;
+    confirm: boolean;
+    requestedBy: string;
+  }): Promise<{
+    dryRun: boolean;
+    requestedBy: string;
+    total: number;
+    recipients: Array<{ id: string; email: string; name: string }>;
+    sent: number;
+    failed: Array<{ email: string; error: string }>;
+  }> {
+    const clients = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.USER,
+        isActive: true,
+        isEmailVerified: true,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: Math.min(params.limit, 150),
+      select: { id: true, email: true, firstName: true, lastName: true },
+    });
+
+    const recipients = clients.map((client) => ({
+      id: client.id,
+      email: client.email,
+      name: [client.firstName, client.lastName].filter(Boolean).join(' ') || 'Hola',
+    }));
+
+    if (!params.confirm) {
+      return {
+        dryRun: true,
+        requestedBy: params.requestedBy,
+        total: recipients.length,
+        recipients,
+        sent: 0,
+        failed: [],
+      };
+    }
+
+    if (this.campaignInProgress) {
+      throw new ConflictException('Ya hay una campaña en proceso de envío');
+    }
+
+    this.campaignInProgress = true;
+    let sent = 0;
+    const failed: Array<{ email: string; error: string }> = [];
+
+    try {
+      for (const recipient of recipients) {
+        try {
+          await this.sendFormacionesCampaignEmail(recipient.email, recipient.name);
+          sent += 1;
+        } catch (error) {
+          failed.push({
+            email: recipient.email,
+            error: error instanceof Error ? error.message : 'Error desconocido',
+          });
+        }
+      }
+
+      this.logger.log(
+        `Formaciones campaign requested by ${params.requestedBy}: ${sent}/${recipients.length} sent`,
+      );
+
+      return {
+        dryRun: false,
+        requestedBy: params.requestedBy,
+        total: recipients.length,
+        recipients,
+        sent,
+        failed,
+      };
+    } finally {
+      this.campaignInProgress = false;
+    }
   }
 
   async sendVerificationEmail(
