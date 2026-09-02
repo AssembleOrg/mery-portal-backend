@@ -39,6 +39,7 @@ export class EmailController {
     return this.emailService.sendFormacionesCampaignToClients({
       limit: dto.limit,
       confirm: dto.confirm,
+      recipients: dto.recipients,
       requestedBy: user.sub,
     });
   }

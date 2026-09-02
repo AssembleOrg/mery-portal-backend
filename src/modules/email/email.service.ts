@@ -31,6 +31,7 @@ export class EmailService {
     limit: number;
     confirm: boolean;
     requestedBy: string;
+    recipients?: Array<{ email: string; name: string }>;
   }): Promise<{
     dryRun: boolean;
     requestedBy: string;
@@ -39,23 +40,37 @@ export class EmailService {
     sent: number;
     failed: Array<{ email: string; error: string }>;
   }> {
-    const clients = await this.prisma.user.findMany({
-      where: {
-        role: UserRole.USER,
-        isActive: true,
-        isEmailVerified: true,
-        deletedAt: null,
-      },
-      orderBy: { createdAt: 'asc' },
-      take: Math.min(params.limit, 150),
-      select: { id: true, email: true, firstName: true, lastName: true },
-    });
-
-    const recipients = clients.map((client) => ({
-      id: client.id,
-      email: client.email,
-      name: [client.firstName, client.lastName].filter(Boolean).join(' ') || 'Hola',
-    }));
+    const recipients = params.recipients
+      ? Array.from(
+          params.recipients
+            .map((recipient, index) => {
+              const normalized = {
+                id: `csv-${index}-${recipient.email}`,
+                email: recipient.email.trim().toLowerCase(),
+                name: recipient.name.trim() || 'Hola',
+              };
+              return [normalized.email, normalized] as const;
+            })
+            .filter(([email]) => email),
+        ).values(),
+        ).slice(0, 150)
+      : (
+          await this.prisma.user.findMany({
+            where: {
+              role: UserRole.USER,
+              isActive: true,
+              isEmailVerified: true,
+              deletedAt: null,
+            },
+            orderBy: { createdAt: 'asc' },
+            take: Math.min(params.limit, 150),
+            select: { id: true, email: true, firstName: true, lastName: true },
+          })
+        ).map((client) => ({
+          id: client.id,
+          email: client.email,
+          name: [client.firstName, client.lastName].filter(Boolean).join(' ') || 'Hola',
+        }));
 
     if (!params.confirm) {
       return {

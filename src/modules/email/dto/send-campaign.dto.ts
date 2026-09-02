@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, Max, Min, ValidateNested } from 'class-validator';
+import { CampaignRecipientDto } from './campaign-recipient.dto';
 
 export class SendCampaignDto {
   @ApiPropertyOptional({
@@ -13,7 +14,7 @@ export class SendCampaignDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(150)
+  @ArrayMaxSize(150)
   limit = 150;
 
   @ApiPropertyOptional({
@@ -24,4 +25,16 @@ export class SendCampaignDto {
   @Type(() => Boolean)
   @IsBoolean()
   confirm = false;
+
+  @ApiPropertyOptional({
+    description: 'Destinatarios seleccionados o importados desde CSV. Si se omite, se consulta la base de clientes.',
+    type: [CampaignRecipientDto],
+    maxItems: 150,
+  })
+  @IsOptional()
+  @IsArray()
+  @Max(150)
+  @ValidateNested({ each: true })
+  @Type(() => CampaignRecipientDto)
+  recipients?: CampaignRecipientDto[];
 }
