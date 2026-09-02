@@ -318,7 +318,7 @@ export class EmailService {
     };
     sendSmtpEmail.to = [{ email, name }];
     sendSmtpEmail.subject =
-      'LAST CALL 🔥 #MGCELEBRATION 💣 40% OFF + Formaciones 100% renovadas 🚀';
+      'LAST CALL 🔥 #MGCELEBRATION 💣 40% OFF + 2 cuotas s/ interés en nuestras Formaciones 🚀';
     sendSmtpEmail.htmlContent = this.getFormacionesCampaignTemplate(name);
 
     try {
