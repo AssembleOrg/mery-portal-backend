@@ -14,7 +14,7 @@ export class SendCampaignDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @ArrayMaxSize(150)
+  @Max(150)
   limit = 150;
 
   @ApiPropertyOptional({
@@ -33,7 +33,7 @@ export class SendCampaignDto {
   })
   @IsOptional()
   @IsArray()
-  @Max(150)
+  @ArrayMaxSize(150)
   @ValidateNested({ each: true })
   @Type(() => CampaignRecipientDto)
   recipients?: CampaignRecipientDto[];
