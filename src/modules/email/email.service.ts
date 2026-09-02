@@ -42,17 +42,18 @@ export class EmailService {
   }> {
     const recipients = params.recipients
       ? Array.from(
-          params.recipients
-            .map((recipient, index) => {
-              const normalized = {
-                id: `csv-${index}-${recipient.email}`,
-                email: recipient.email.trim().toLowerCase(),
-                name: recipient.name.trim() || 'Hola',
-              };
-              return [normalized.email, normalized] as const;
-            })
-            .filter(([email]) => email),
-        ).values(),
+          new Map(
+            params.recipients
+              .map((recipient, index) => {
+                const normalized = {
+                  id: `csv-${index}-${recipient.email}`,
+                  email: recipient.email.trim().toLowerCase(),
+                  name: recipient.name.trim() || 'Hola',
+                };
+                return [normalized.email, normalized] as const;
+              })
+              .filter(([email]) => email),
+          ).values(),
         ).slice(0, 150)
       : (
           await this.prisma.user.findMany({
