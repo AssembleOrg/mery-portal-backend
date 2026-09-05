@@ -257,19 +257,37 @@ export class MentorshipService {
     });
   }
 
+  /**
+   * Mentoría vigente del alumno en CUALQUIER curso. La mentoría gratuita es una
+   * sola por cuenta: si ya tiene una agendada o cumplida (en la formación que
+   * sea), no puede reservar otra. Las canceladas no cuentan (liberan el cupo).
+   */
+  private async accountMentorship(userId: string) {
+    return this.prisma.mentorship.findFirst({
+      where: {
+        userId,
+        status: { in: [MentorshipStatus.SCHEDULED, MentorshipStatus.COMPLETED] },
+      },
+    });
+  }
+
   async getEligibility(userId: string, categoryId: string) {
-    const [purchase, examOk, current] = await Promise.all([
+    const [purchase, examOk, current, accountAny] = await Promise.all([
       this.activePurchase(userId, categoryId),
       this.examPassed(userId, categoryId),
       this.currentMentorship(userId, categoryId),
+      this.accountMentorship(userId),
     ]);
     const purchased = !!purchase && purchase.isActive;
+    // Bloqueada porque ya usó su mentoría gratis en OTRA formación.
+    const blockedByOtherCourse = !current && !!accountAny;
     return {
       purchased,
       examPassed: examOk,
       alreadyBooked: !!current,
       mentorship: current ? this.serialize(current) : null,
-      canBook: purchased && examOk && !current,
+      blockedByOtherCourse,
+      canBook: purchased && examOk && !accountAny,
     };
   }
 
@@ -310,6 +328,16 @@ export class MentorshipService {
     if (!examOk) {
       throw new ForbiddenException(
         'Primero tenés que aprobar el examen final del curso',
+      );
+    }
+
+    // La mentoría gratuita es una sola por cuenta (sin importar la formación).
+    const accountAny = await this.accountMentorship(userId);
+    if (accountAny) {
+      throw new ForbiddenException(
+        accountAny.categoryId === categoryId
+          ? 'Ya tenés una mentoría para este curso'
+          : 'La mentoría gratuita es una sola por cuenta y ya la usaste en otra formación',
       );
     }
 
