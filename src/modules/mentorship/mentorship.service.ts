@@ -11,6 +11,7 @@ import { PrismaService } from '../../shared/services';
 import { GoogleCalendarService } from './google-calendar.service';
 import { MentorshipEmailService } from './mentorship-email.service';
 import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   BookMentorshipDto,
   CreateAvailabilityDto,
@@ -46,6 +47,7 @@ export class MentorshipService {
     private readonly calendar: GoogleCalendarService,
     private readonly email: MentorshipEmailService,
     private readonly gateway: ChatGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Aviso a los admins (no bloquea el flujo si falla). */
@@ -85,6 +87,23 @@ export class MentorshipService {
         studentName,
         courseName: m.category.name,
         start: m.scheduledStart.toISOString(),
+      });
+      // Campana persistente de los admins.
+      const when = m.scheduledStart.toLocaleString('es-AR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: TZ,
+      });
+      void this.notifications.notifyAdmins({
+        type: `mentorship_${typeByAction[action]}`,
+        title: `${studentName} ${action} su mentoría — ${m.category.name}`,
+        body: `${when} hs`,
+        url: '/es/admin/mentorias',
+        data: { mentorshipId: m.id },
       });
     } catch (err) {
       this.logger.warn(`No se pudo avisar a admins: ${(err as Error).message}`);
@@ -819,7 +838,7 @@ export class MentorshipService {
       categoryId = categoryId ?? product.categoryId;
     }
 
-    return this.prisma.mentorshipCredit.create({
+    const credit = await this.prisma.mentorshipCredit.create({
       data: {
         userId: dto.userId,
         productId: dto.productId ?? null,
@@ -830,7 +849,23 @@ export class MentorshipService {
         note: dto.note ?? null,
         grantedById: grantedById ?? null,
       },
+      include: { product: { select: { name: true } } },
     });
+    // Avisar a la alumna que ya puede reservar / coordinar.
+    void this.notifications.notify(dto.userId, {
+      type: 'mentorship_credit_granted',
+      title:
+        type === 'ONE_TO_ONE'
+          ? `Tu clase one-to-one está habilitada${credit.product ? `: ${credit.product.name}` : ''}`
+          : `Ya podés reservar tu mentoría${credit.product ? `: ${credit.product.name}` : ''}`,
+      body:
+        type === 'ONE_TO_ONE'
+          ? 'Confirmamos tu pago. Te contactamos para coordinar la fecha.'
+          : 'Confirmamos tu pago. Entrá a tu curso y elegí un horario.',
+      url: '/es/mi-cuenta',
+      data: { creditId: credit.id },
+    });
+    return credit;
   }
 
   /** Créditos de un alumno (para el admin). */

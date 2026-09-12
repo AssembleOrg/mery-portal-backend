@@ -52,6 +52,8 @@ model User {
   mentorships       Mentorship[]
   mentorshipCredits MentorshipCredit[]
   presencialSignups PresencialSignup[]
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
 
   // Audit fields
   createdAt DateTime  @default(now())
@@ -598,6 +600,47 @@ model PresencialSignup {
   @@index([userId])
   @@index([status])
   @@map("presencial_signups")
+}
+
+// ============================================================================
+// Notificaciones in-app persistentes (campana) + suscripciones Web Push (PWA)
+// ============================================================================
+
+/// Notificación in-app de un usuario (admin o alumna). Se muestra en la campana
+/// y, si el dispositivo se suscribió, también llega como push del navegador.
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   String // presencial_confirmed | presencial_rejected | presencial_class_cancelled | presencial_signup | presencial_signup_cancelled | mentorship_booked | mentorship_rescheduled | mentorship_cancelled | mentorship_credit_granted | ...
+  title  String
+  body   String?
+  url    String? // ruta relativa a abrir al tocar (ej. /es/mi-cuenta)
+  data   Json?
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+/// Suscripción Web Push de un dispositivo/navegador de un usuario (opt-in).
+model PushSubscription {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // ============================================================================

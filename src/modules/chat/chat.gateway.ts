@@ -272,6 +272,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to('admins').emit('mentorship_event', payload);
   }
 
+  /** Notificación persistente (campana) recién creada para un usuario. */
+  emitNotification(
+    userId: string,
+    notification: {
+      id: string;
+      type: string;
+      title: string;
+      body: string | null;
+      url: string | null;
+      createdAt: string;
+    },
+  ) {
+    if (!this.server) return;
+    this.server.to(`user:${userId}`).emit('notification', notification);
+  }
+
   /**
    * Notificación in-app de clases presenciales. Siempre llega a los admins;
    * si se pasan userIds, también a esas alumnas (sala user:{id}).

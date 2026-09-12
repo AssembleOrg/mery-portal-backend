@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../shared/services';
 import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PresencialEmailService } from './presencial-email.service';
 import { CreatePresencialClassDto, UpdatePresencialClassDto } from './dto';
 
@@ -56,7 +57,20 @@ export class PresencialClassesService {
     private readonly prisma: PrismaService,
     private readonly email: PresencialEmailService,
     private readonly gateway: ChatGateway,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** "lunes 05/10 · 14:00 a 18:00 hs" para títulos/cuerpos de notificaciones. */
+  private whenLabel(c: { startAt: Date; startHour: number; endHour: number }) {
+    const day = c.startAt.toLocaleDateString('es-AR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      timeZone: TZ,
+    });
+    const hh = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    return `${day} · ${hh(c.startHour)} a ${hh(c.endHour)} hs`;
+  }
 
   // ---------------------------------------------------------------------------
   // Helpers de fecha (hora Argentina, sin DST)
@@ -304,6 +318,13 @@ export class PresencialClassesService {
       start: cls.startAt.toISOString(),
       studentName: this.studentName(user),
     });
+    void this.notifications.notifyAdmins({
+      type: 'presencial_signup',
+      title: `${this.studentName(user)} se anotó a ${cls.title}`,
+      body: this.whenLabel(cls),
+      url: '/es/admin/mentorias',
+      data: { classId: cls.id, userId },
+    });
     return { id: row.id, status: row.status };
   }
 
@@ -331,6 +352,13 @@ export class PresencialClassesService {
       title: s.class.title,
       start: s.class.startAt.toISOString(),
       studentName: this.studentName(s.user),
+    });
+    void this.notifications.notifyAdmins({
+      type: 'presencial_signup_cancelled',
+      title: `${this.studentName(s.user)} se bajó de ${s.class.title}`,
+      body: this.whenLabel(s.class),
+      url: '/es/admin/mentorias',
+      data: { classId: s.classId, userId },
     });
     return { cancelled: true };
   }
@@ -514,6 +542,16 @@ export class PresencialClassesService {
       },
       pending.map((s) => s.userId),
     );
+    await this.notifications.notifyMany(
+      pending.map((s) => s.userId),
+      {
+        type: 'presencial_confirmed',
+        title: `Confirmada ✅ tu clase presencial: ${cls.title}`,
+        body: this.whenLabel(cls),
+        url: '/es/mi-cuenta',
+        data: { classId: cls.id },
+      },
+    );
     this.logger.log(`Clase ${cls.title} confirmada · ${pending.length} inscriptas avisadas`);
     return { confirmed: true, notified: pending.length };
   }
@@ -557,6 +595,16 @@ export class PresencialClassesService {
       },
       active.map((s) => s.userId),
     );
+    await this.notifications.notifyMany(
+      active.map((s) => s.userId),
+      {
+        type: 'presencial_class_cancelled',
+        title: `Se canceló la clase presencial ${cls.title}`,
+        body: `${this.whenLabel(cls)}. Podés anotarte a otra fecha desde tu cuenta.`,
+        url: '/es/mi-cuenta',
+        data: { classId: cls.id },
+      },
+    );
     return { cancelled: true, notified: active.length };
   }
 
@@ -584,6 +632,13 @@ export class PresencialClassesService {
       },
       [s.userId],
     );
+    await this.notifications.notify(s.userId, {
+      type: 'presencial_confirmed',
+      title: `Confirmada ✅ tu clase presencial: ${s.class.title}`,
+      body: this.whenLabel(s.class),
+      url: '/es/mi-cuenta',
+      data: { classId: s.classId },
+    });
     return { confirmed: true };
   }
 
@@ -611,6 +666,13 @@ export class PresencialClassesService {
       },
       [s.userId],
     );
+    await this.notifications.notify(s.userId, {
+      type: 'presencial_rejected',
+      title: `No pudimos confirmar tu lugar en ${s.class.title}`,
+      body: `${this.whenLabel(s.class)}. Podés anotarte a otra fecha desde tu cuenta.`,
+      url: '/es/mi-cuenta',
+      data: { classId: s.classId },
+    });
     return { rejected: true };
   }
 
