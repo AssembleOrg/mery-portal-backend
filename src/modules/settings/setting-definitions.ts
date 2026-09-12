@@ -19,6 +19,7 @@ export interface SettingDefinition {
 }
 
 export const CHAT_LIFETIME_DAYS_KEY = 'chat.lifetimeDays';
+export const CHAT_CLOSING_MESSAGE_KEY = 'chat.closingMessage';
 
 // Promo global fija (sin cupón): descuento automático + tope de cuotas para
 // cualquier compra en pesos mientras esté activa.
@@ -39,6 +40,16 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue: '30',
     min: 1,
     max: 3650,
+  },
+  {
+    key: CHAT_CLOSING_MESSAGE_KEY,
+    label: 'Mensaje de despedida del chat',
+    description:
+      'Se envía como último mensaje en el chat cuando la sala se cierra (por vencimiento o porque un admin la bloqueó). Se manda una sola vez por cierre. Dejalo vacío para no enviar nada.',
+    type: 'string',
+    defaultValue:
+      '¡Gracias por haber sido parte de esta formación! Este chat se cierra acá, pero seguimos en contacto por redes y por mail para lo que necesites. Te deseamos muchos éxitos. 💕',
+    max: 1000,
   },
   {
     key: CHECKOUT_PROMO_ACTIVE_KEY,

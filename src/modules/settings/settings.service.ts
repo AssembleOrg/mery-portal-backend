@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
 import {
+  CHAT_CLOSING_MESSAGE_KEY,
   CHAT_LIFETIME_DAYS_KEY,
   CHECKOUT_PROMO_ACTIVE_KEY,
   CHECKOUT_PROMO_DISCOUNT_KEY,
@@ -54,7 +55,13 @@ export class SettingsService {
       }
       return raw === 'true' || raw === '1' ? 'true' : 'false';
     }
-    return raw;
+    const text = raw.trim();
+    if (def.max !== undefined && text.length > def.max) {
+      throw new BadRequestException(
+        `"${def.label}" no puede superar los ${def.max} caracteres`,
+      );
+    }
+    return text;
   }
 
   /** Valor crudo (string) con fallback al default de la definición. */
@@ -82,6 +89,15 @@ export class SettingsService {
   async getNumber(key: string): Promise<number> {
     const def = getSettingDefinition(key)!;
     return this.parse(def, await this.getRaw(key)) as number;
+  }
+
+  async getString(key: string): Promise<string> {
+    return this.getRaw(key);
+  }
+
+  /** Texto de despedida del chat. Vacío = no se manda nada al cerrar. */
+  async getChatClosingMessage(): Promise<string> {
+    return (await this.getString(CHAT_CLOSING_MESSAGE_KEY)).trim();
   }
 
   async getChatLifetimeDays(): Promise<number> {

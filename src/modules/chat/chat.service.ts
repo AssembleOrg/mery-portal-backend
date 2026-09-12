@@ -259,6 +259,8 @@ export class ChatService {
         computed.status,
         now,
       );
+      // Una sala recién creada nunca nace CLOSED, así que no hay despedida que
+      // mandar acá.
       return this.prisma.chatRoom.create({
         data: {
           userId,
@@ -284,20 +286,28 @@ export class ChatService {
       (existing.expiresAt?.getTime() ?? null) !==
         (life.expiresAt?.getTime() ?? null);
 
-    if (!needsUpdate) return existing;
+    const room = needsUpdate
+      ? await this.prisma.chatRoom.update({
+          where: { id: existing.id },
+          data: {
+            status: life.status,
+            unlockedAt: life.unlockedAt,
+            expiresAt: life.expiresAt,
+          },
+          include: {
+            user: { select: { id: true, firstName: true, lastName: true, email: true } },
+            category: { select: { id: true, name: true, slug: true, image: true } },
+          },
+        })
+      : existing;
 
-    return this.prisma.chatRoom.update({
-      where: { id: existing.id },
-      data: {
-        status: life.status,
-        unlockedAt: life.unlockedAt,
-        expiresAt: life.expiresAt,
-      },
-      include: {
-        user: { select: { id: true, firstName: true, lastName: true, email: true } },
-        category: { select: { id: true, name: true, slug: true, image: true } },
-      },
-    });
+    // Despedida al vencer la vida del chat. Va acá (y no solo en el cron) para
+    // que también salga cuando el cierre se detecta on-demand desde el front.
+    if (room.status === ChatRoomStatus.CLOSED && !room.closingMessageSentAt) {
+      await this.sendClosingMessageIfNeeded(room.id);
+    }
+
+    return room;
   }
 
   /**
@@ -348,6 +358,67 @@ export class ChatService {
     }
 
     return out;
+  }
+
+  /**
+   * Envía el mensaje de despedida configurado ("chat.closingMessage") como un
+   * mensaje más del hilo, firmado por un admin. Es idempotente: se marca en
+   * closingMessageSentAt y no se repite hasta que la sala se reabra o
+   * desbloquee. Si el texto está vacío, no manda nada.
+   *
+   * Nunca revienta hacia afuera: el cierre de la sala no debe fallar porque el
+   * mensaje no se pudo escribir.
+   */
+  async sendClosingMessageIfNeeded(roomId: string): Promise<boolean> {
+    try {
+      const text = await this.settings.getChatClosingMessage();
+      if (!text) return false;
+
+      const senderId = await this.closingMessageSenderId();
+      if (!senderId) {
+        this.logger.warn(
+          'No hay ningún admin activo para firmar el mensaje de cierre del chat',
+        );
+        return false;
+      }
+
+      // Guard contra dobles envíos (dos requests concurrentes, cron + front).
+      const claimed = await this.prisma.chatRoom.updateMany({
+        where: { id: roomId, closingMessageSentAt: null },
+        data: { closingMessageSentAt: new Date() },
+      });
+      if (claimed.count === 0) return false;
+
+      const message = await this.prisma.chatMessage.create({
+        data: {
+          roomId,
+          senderId,
+          senderRole: ChatSenderRole.ADMIN,
+          type: ChatMessageType.TEXT,
+          content: text,
+        },
+      });
+      await this.prisma.chatRoom.update({
+        where: { id: roomId },
+        data: { lastMessageAt: message.createdAt },
+      });
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo enviar el mensaje de cierre de la sala ${roomId}: ${(err as Error).message}`,
+      );
+      return false;
+    }
+  }
+
+  /** Admin más antiguo activo: firma los mensajes automáticos del sistema. */
+  private async closingMessageSenderId(): Promise<string | null> {
+    const admin = await this.prisma.user.findFirst({
+      where: { role: UserRole.ADMIN, isActive: true, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    return admin?.id ?? null;
   }
 
   // --------------------------------------------------------------------------
@@ -744,7 +815,12 @@ export class ChatService {
     const updated = await this.updateRoomReturning(roomId, {
       blocked,
       blockedAt: blocked ? new Date() : null,
+      // Al desbloquear se rearma la despedida para el próximo cierre.
+      ...(blocked ? {} : { closingMessageSentAt: null }),
     });
+    if (blocked) {
+      await this.sendClosingMessageIfNeeded(roomId);
+    }
     return { room: this.serializeRoom(updated), changed: true };
   }
 
@@ -774,6 +850,8 @@ export class ChatService {
       expiresAt,
       unlockedAt: room.unlockedAt ?? now,
       status: ChatRoomStatus.ACTIVE,
+      // El chat vuelve a abrirse: la despedida se rearma para el próximo cierre.
+      closingMessageSentAt: null,
     });
     return { room: this.serializeRoom(updated), changed: true };
   }
@@ -788,7 +866,13 @@ export class ChatService {
     const expiresAt = await this.computeExpiry(now);
     const { count } = await this.prisma.chatRoom.updateMany({
       where: { userId, unlockedAt: { not: null } },
-      data: { expiresAt, status: ChatRoomStatus.ACTIVE },
+      // closingMessageSentAt vuelve a null: si estas salas ya se habían
+      // despedido, la próxima vez que cierren se despiden de nuevo.
+      data: {
+        expiresAt,
+        status: ChatRoomStatus.ACTIVE,
+        closingMessageSentAt: null,
+      },
     });
     return { reopened: count };
   }

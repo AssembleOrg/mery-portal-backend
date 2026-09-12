@@ -693,6 +693,10 @@ model ChatRoom {
   // puede extenderlo y comprar otra formación lo reabre.
   expiresAt DateTime?
 
+  // Mensaje de despedida (setting "chat.closingMessage") ya enviado al cerrarse
+  // la sala. Marca de idempotencia: se limpia si el chat se reabre o desbloquea.
+  closingMessageSentAt DateTime?
+
   // DEPRECADO: sistema de tokens reemplazado por `blocked`. Se conservan las
   // columnas para no perder historial; no se usan más.
   tokens          Int       @default(0)
