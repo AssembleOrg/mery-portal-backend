@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -35,6 +36,9 @@ import {
 } from './dto';
 import { ChatRoomStatus } from '@prisma/client';
 
+/** Tope de categorías por request batch de elegibilidad. */
+const MAX_CATEGORIES_PER_BATCH = 50;
+
 @ApiTags('chat')
 @ApiBearerAuth()
 @Controller('chat')
@@ -55,14 +59,46 @@ export class ChatController {
     return this.chat.listStudentRooms(user.sub);
   }
 
+  @Get('rooms/by-categories')
+  async myRoomsForCategories(
+    @CurrentUser() user: JwtPayload,
+    @Query('ids') ids?: string,
+  ) {
+    const categoryIds = (ids ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    if (!categoryIds.length) return { items: [] };
+    if (categoryIds.length > MAX_CATEGORIES_PER_BATCH) {
+      throw new BadRequestException(
+        `Máximo ${MAX_CATEGORIES_PER_BATCH} categorías por request`,
+      );
+    }
+
+    const rows = await this.chat.ensureRoomsForCategories(
+      user.sub,
+      categoryIds,
+    );
+    return {
+      items: rows.map(({ categoryId, room, computed }) => ({
+        categoryId,
+        room: this.chat.serializeRoomAsync(room),
+        computed,
+      })),
+    };
+  }
+
   @Get('rooms/by-category/:categoryId')
   async myRoomForCategory(
     @CurrentUser() user: JwtPayload,
     @Param('categoryId') categoryId: string,
   ) {
-    const room = await this.chat.ensureRoom(user.sub, categoryId);
-    const computed = await this.chat.computeStatus(user.sub, categoryId);
-    return { room: await this.chat.serializeRoomAsync(room), computed };
+    const { room, computed } = await this.chat.ensureRoomWithStatus(
+      user.sub,
+      categoryId,
+    );
+    return { room: this.chat.serializeRoomAsync(room), computed };
   }
 
   @Get('unread-count')

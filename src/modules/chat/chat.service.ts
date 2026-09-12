@@ -27,6 +27,19 @@ type RoomWithRelations = Prisma.ChatRoomGetPayload<{
   };
 }>;
 
+export interface ComputedChatStatus {
+  status: ChatRoomStatus;
+  gracePeriodEnd: Date | null;
+  progressPercent: number;
+  videosTotal: number;
+  videosCompleted: number;
+  purchaseActive: boolean;
+  quizRequired: boolean;
+  quizPassed: boolean;
+  mentorshipRequired: boolean;
+  mentorshipCompleted: boolean;
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -60,98 +73,125 @@ export class ChatService {
   async computeStatus(
     userId: string,
     categoryId: string,
-  ): Promise<{
-    status: ChatRoomStatus;
-    gracePeriodEnd: Date | null;
-    progressPercent: number;
-    videosTotal: number;
-    videosCompleted: number;
-    purchaseActive: boolean;
-    quizRequired: boolean;
-    quizPassed: boolean;
-    mentorshipRequired: boolean;
-    mentorshipCompleted: boolean;
-  }> {
-    const now = new Date();
-    const purchase = await this.prisma.categoryPurchase.findUnique({
-      where: { userId_categoryId: { userId, categoryId } },
-    });
-    const category = await this.prisma.videoCategory.findUnique({
-      where: { id: categoryId },
-      select: { slug: true },
-    });
-    const quizRequired = category
-      ? isQuizRequiredForSlug(category.slug)
-      : false;
-    const quizPassed = quizRequired
-      ? (await this.prisma.quizAttempt.findFirst({
-          where: { userId, categoryId, passed: true },
-          select: { id: true },
-        })) !== null
-      : false;
-    const videos = await this.prisma.video.findMany({
-      where: { categoryId, isPublished: true, deletedAt: null },
-      select: { id: true },
-    });
-    const videoIds = videos.map((v) => v.id);
-    const views = videoIds.length
+  ): Promise<ComputedChatStatus> {
+    const many = await this.computeStatusMany(userId, [categoryId]);
+    return many.get(categoryId) as ComputedChatStatus;
+  }
+
+  /**
+   * Versión batch de computeStatus: resuelve N categorías con una cantidad fija
+   * de queries en vez de una tanda por categoría. La lógica del gate es
+   * idéntica; lo único que cambia es que los datos se traen agrupados.
+   */
+  async computeStatusMany(
+    userId: string,
+    categoryIds: string[],
+  ): Promise<Map<string, ComputedChatStatus>> {
+    const ids = [...new Set(categoryIds)];
+    const result = new Map<string, ComputedChatStatus>();
+    if (!ids.length) return result;
+
+    const [purchases, categories, quizAttempts, videos, mentorships] =
+      await Promise.all([
+        this.prisma.categoryPurchase.findMany({
+          where: { userId, categoryId: { in: ids } },
+          select: { categoryId: true, isActive: true },
+        }),
+        this.prisma.videoCategory.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, slug: true },
+        }),
+        this.prisma.quizAttempt.findMany({
+          where: { userId, categoryId: { in: ids }, passed: true },
+          select: { categoryId: true },
+          distinct: ['categoryId'],
+        }),
+        this.prisma.video.findMany({
+          where: { categoryId: { in: ids }, isPublished: true, deletedAt: null },
+          select: { id: true, categoryId: true },
+        }),
+        this.prisma.mentorship.findMany({
+          where: { userId, categoryId: { in: ids }, status: 'COMPLETED' },
+          select: { categoryId: true },
+          distinct: ['categoryId'],
+        }),
+      ]);
+
+    const views = videos.length
       ? await this.prisma.videoView.findMany({
-          where: { userId, videoId: { in: videoIds } },
+          where: { userId, videoId: { in: videos.map((v) => v.id) } },
           select: { videoId: true, progress: true },
         })
       : [];
-    const viewsByVideo = new Map(views.map((v) => [v.videoId, v.progress]));
-    const videosCompleted = videoIds.filter(
-      (id) => (viewsByVideo.get(id) ?? 0) >= MIN_VIDEO_PROGRESS_PERCENT,
-    ).length;
-    const videosTotal = videoIds.length;
-    const progressPercent = videosTotal
-      ? Math.round((videosCompleted / videosTotal) * 100)
-      : 0;
 
-    // Mentoría cumplida (COMPLETED) para este curso: requisito para abrir el chat.
-    const mentorshipCompleted =
-      (await this.prisma.mentorship.findFirst({
-        where: { userId, categoryId, status: 'COMPLETED' },
-        select: { id: true },
-      })) !== null;
+    const purchaseByCategory = new Map(purchases.map((p) => [p.categoryId, p]));
+    const slugByCategory = new Map(categories.map((c) => [c.id, c.slug]));
+    const quizPassedSet = new Set(quizAttempts.map((q) => q.categoryId));
+    const mentorshipSet = new Set(mentorships.map((m) => m.categoryId));
+    const progressByVideo = new Map(views.map((v) => [v.videoId, v.progress]));
+    const videosByCategory = new Map<string, string[]>();
+    for (const v of videos) {
+      const list = videosByCategory.get(v.categoryId);
+      if (list) list.push(v.id);
+      else videosByCategory.set(v.categoryId, [v.id]);
+    }
 
-    // Sin compra → no debería ni existir la sala
-    if (!purchase) {
-      return {
-        status: ChatRoomStatus.LOCKED,
+    for (const categoryId of ids) {
+      const slug = slugByCategory.get(categoryId);
+      const quizRequired = slug ? isQuizRequiredForSlug(slug) : false;
+      const quizPassed = quizRequired && quizPassedSet.has(categoryId);
+      const videoIds = videosByCategory.get(categoryId) ?? [];
+      const videosTotal = videoIds.length;
+      const videosCompleted = videoIds.filter(
+        (id) => (progressByVideo.get(id) ?? 0) >= MIN_VIDEO_PROGRESS_PERCENT,
+      ).length;
+      const progressPercent = videosTotal
+        ? Math.round((videosCompleted / videosTotal) * 100)
+        : 0;
+      const mentorshipCompleted = mentorshipSet.has(categoryId);
+      const purchase = purchaseByCategory.get(categoryId);
+
+      // Sin compra → no debería ni existir la sala
+      if (!purchase) {
+        result.set(categoryId, {
+          status: ChatRoomStatus.LOCKED,
+          gracePeriodEnd: null,
+          progressPercent,
+          videosTotal,
+          videosCompleted,
+          purchaseActive: false,
+          quizRequired,
+          quizPassed,
+          mentorshipRequired: true,
+          mentorshipCompleted,
+        });
+        continue;
+      }
+
+      // Gate de apertura: 95% de progreso + examen aprobado (si aplica) + haber
+      // tenido la mentoría del curso. El vencimiento por vida del chat lo
+      // resuelve ensureRoom con la fecha real de desbloqueo (unlockedAt).
+      const gateMet =
+        videosTotal > 0 &&
+        videosCompleted === videosTotal &&
+        (!quizRequired || quizPassed) &&
+        mentorshipCompleted;
+
+      result.set(categoryId, {
+        status: gateMet ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
         gracePeriodEnd: null,
         progressPercent,
         videosTotal,
         videosCompleted,
-        purchaseActive: false,
+        purchaseActive: purchase.isActive,
         quizRequired,
         quizPassed,
         mentorshipRequired: true,
         mentorshipCompleted,
-      };
+      });
     }
 
-    // Gate de apertura: 95% de progreso + examen aprobado (si aplica) + haber
-    // tenido la mentoría del curso. El vencimiento por vida del chat (30 días)
-    // lo resuelve ensureRoom con la fecha real de desbloqueo (unlockedAt).
-    const gateMet =
-      videosTotal > 0 &&
-      videosCompleted === videosTotal &&
-      (!quizRequired || quizPassed) &&
-      mentorshipCompleted;
-    return {
-      status: gateMet ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
-      gracePeriodEnd: null,
-      progressPercent,
-      videosTotal,
-      videosCompleted,
-      purchaseActive: purchase.isActive,
-      quizRequired,
-      quizPassed,
-      mentorshipRequired: true,
-      mentorshipCompleted,
-    };
+    return result;
   }
 
   /**
@@ -197,8 +237,13 @@ export class ChatService {
    * Asegura que exista una ChatRoom para (userId, categoryId) y actualiza su status
    * según la situación actual. Se ejecuta cada vez que se accede desde el front.
    */
-  async ensureRoom(userId: string, categoryId: string): Promise<RoomWithRelations> {
-    const computed = await this.computeStatus(userId, categoryId);
+  async ensureRoom(
+    userId: string,
+    categoryId: string,
+    precomputed?: ComputedChatStatus,
+  ): Promise<RoomWithRelations> {
+    const computed =
+      precomputed ?? (await this.computeStatus(userId, categoryId));
     const now = new Date();
 
     const existing = await this.prisma.chatRoom.findUnique({
@@ -254,6 +299,56 @@ export class ChatService {
         category: { select: { id: true, name: true, slug: true, image: true } },
       },
     });
+  }
+
+  /**
+   * ensureRoom + computeStatus en una sola pasada (evita recalcular el gate dos
+   * veces, que es lo que hacía el controller).
+   */
+  async ensureRoomWithStatus(
+    userId: string,
+    categoryId: string,
+  ): Promise<{ room: RoomWithRelations; computed: ComputedChatStatus }> {
+    const computed = await this.computeStatus(userId, categoryId);
+    const room = await this.ensureRoom(userId, categoryId, computed);
+    return { room, computed };
+  }
+
+  /**
+   * Versión batch: resuelve sala + elegibilidad para varias categorías de una.
+   * Pensado para la pantalla "mi cuenta", donde antes se disparaba un request
+   * por curso (y otro por curso en cada focus de la ventana).
+   */
+  async ensureRoomsForCategories(
+    userId: string,
+    categoryIds: string[],
+  ): Promise<
+    Array<{
+      categoryId: string;
+      room: RoomWithRelations;
+      computed: ComputedChatStatus;
+    }>
+  > {
+    const ids = [...new Set(categoryIds)];
+    if (!ids.length) return [];
+
+    const statuses = await this.computeStatusMany(userId, ids);
+    const out: Array<{
+      categoryId: string;
+      room: RoomWithRelations;
+      computed: ComputedChatStatus;
+    }> = [];
+
+    // Las salas se resuelven en serie a propósito: crear/actualizar en paralelo
+    // sobre la misma (userId, categoryId) puede chocar y el volumen es chico.
+    for (const categoryId of ids) {
+      const computed = statuses.get(categoryId);
+      if (!computed) continue;
+      const room = await this.ensureRoom(userId, categoryId, computed);
+      out.push({ categoryId, room, computed });
+    }
+
+    return out;
   }
 
   // --------------------------------------------------------------------------
