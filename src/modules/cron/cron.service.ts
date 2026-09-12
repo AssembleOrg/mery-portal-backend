@@ -4,6 +4,7 @@ import { PrismaService } from '../../shared/services';
 import { CouponsService } from '../coupons/coupons.service';
 import { ChatService } from '../chat/chat.service';
 import { MentorshipService } from '../mentorship/mentorship.service';
+import { PresencialClassesService } from '../presencial-classes/presencial-classes.service';
 
 @Injectable()
 export class CronService {
@@ -14,7 +15,24 @@ export class CronService {
     private readonly couponsService: CouponsService,
     private readonly chatService: ChatService,
     private readonly mentorshipService: MentorshipService,
+    private readonly presencialService: PresencialClassesService,
   ) {}
+
+  /** Cierra clases presenciales ya pasadas (y sus inscripciones) → COMPLETED. */
+  @Cron(CronExpression.EVERY_30_MINUTES, {
+    name: 'complete-past-presencial-classes',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async completePresencialClasses() {
+    try {
+      const { completed } = await this.presencialService.completePast();
+      if (completed > 0) {
+        this.logger.log(`🏫 [CRON] ${completed} clase(s) presencial(es) cerradas`);
+      }
+    } catch (error) {
+      this.logger.error('❌ [CRON] Error cerrando clases presenciales:', error);
+    }
+  }
 
   /**
    * Cron job que se ejecuta todos los días a las 3 AM (zona horaria del servidor)

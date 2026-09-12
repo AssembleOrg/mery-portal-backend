@@ -24,6 +24,7 @@ import { SettingsModule } from './modules/settings';
 import { RewardsModule } from './modules/rewards/rewards.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MentorshipModule } from './modules/mentorship/mentorship.module';
+import { PresencialClassesModule } from './modules/presencial-classes';
 import { PublicCatalogModule } from './modules/public-catalog';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
@@ -74,6 +75,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     RewardsModule,
     CheckoutModule,
     MentorshipModule,
+    PresencialClassesModule,
     PublicCatalogModule,
   ],
   controllers: [AppController],

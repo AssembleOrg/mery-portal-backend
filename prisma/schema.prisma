@@ -51,6 +51,7 @@ model User {
   coupons           Coupon[]           @relation("UserCoupons")
   mentorships       Mentorship[]
   mentorshipCredits MentorshipCredit[]
+  presencialSignups PresencialSignup[]
 
   // Audit fields
   createdAt DateTime  @default(now())
@@ -121,6 +122,7 @@ model VideoCategory {
   quizAttempts       QuizAttempt[]
   mentorships        Mentorship[]
   mentorshipProducts MentorshipProduct[]
+  presencialClasses  PresencialClassCategory[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -515,6 +517,87 @@ model MentorshipCredit {
   @@index([status])
   @@index([categoryId])
   @@map("mentorship_credits")
+}
+
+// ============================================================================
+// Clases presenciales: fechas tentativas que abre el admin (hasta 6 meses),
+// inscripción libre (1 activa por alumna) y confirmación posterior con aviso.
+// ============================================================================
+
+enum PresencialClassStatus {
+  TENTATIVE // fecha estimativa, puede cambiar
+  CONFIRMED // confirmada por el admin (se avisa a las inscriptas)
+  CANCELLED
+  COMPLETED // ya pasó (cron)
+}
+
+enum PresencialSignupStatus {
+  PENDING // anotada, esperando confirmación
+  CONFIRMED
+  REJECTED // el admin no le dio lugar
+  CANCELLED // la alumna se bajó (o se canceló la clase)
+  COMPLETED // la clase ya pasó (cron)
+}
+
+/// Clase presencial. startAt/endAt se calculan de la fecha + horas (09–18, hora
+/// Argentina). Puede haber más de una el mismo día (ej. Estilismo 14–18 y
+/// Tatuaje 10–18). Las inscriptas NO ven cuántas hay; el admin sí.
+model PresencialClass {
+  id          String                @id @default(cuid())
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  startHour   Int // 9..17
+  endHour     Int // 10..18
+  status      PresencialClassStatus @default(TENTATIVE)
+  // Si está activo, solo se anotan alumnas con compra activa de alguna de las
+  // formaciones de la clase. Por defecto la inscripción es libre.
+  restrictToStudents Boolean   @default(false)
+  confirmedAt        DateTime?
+
+  categories PresencialClassCategory[]
+  signups    PresencialSignup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startAt])
+  @@index([status])
+  @@map("presencial_classes")
+}
+
+/// Formaciones a las que aplica una clase presencial (N:N).
+model PresencialClassCategory {
+  classId    String
+  class      PresencialClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   VideoCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([classId, categoryId])
+  @@index([categoryId])
+  @@map("presencial_class_categories")
+}
+
+/// Inscripción de una alumna a una clase presencial. Máximo 1 activa
+/// (PENDING/CONFIRMED) por alumna — índice único parcial en la migración.
+model PresencialSignup {
+  id      String                 @id @default(cuid())
+  classId String
+  class   PresencialClass        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status  PresencialSignupStatus @default(PENDING)
+  note    String?
+  confirmedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classId, userId])
+  @@index([userId])
+  @@index([status])
+  @@map("presencial_signups")
 }
 
 // ============================================================================

@@ -272,6 +272,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to('admins').emit('mentorship_event', payload);
   }
 
+  /**
+   * Notificación in-app de clases presenciales. Siempre llega a los admins;
+   * si se pasan userIds, también a esas alumnas (sala user:{id}).
+   */
+  broadcastPresencialEvent(
+    payload: {
+      type: 'signup' | 'signup_cancelled' | 'confirmed' | 'rejected' | 'class_cancelled';
+      classId: string;
+      title: string;
+      start: string;
+      studentName?: string;
+    },
+    userIds: string[] = [],
+  ) {
+    if (!this.server) return;
+    this.server.to('admins').emit('presencial_event', payload);
+    for (const id of userIds) {
+      this.server.to(`user:${id}`).emit('presencial_event', payload);
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Utils
   // --------------------------------------------------------------------------
