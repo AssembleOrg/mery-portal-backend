@@ -1,9 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { MentorshipProductType } from '@prisma/client';
 import {
   IsBoolean,
   IsDateString,
   IsEmail,
+  IsEnum,
+  IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -53,6 +57,164 @@ export class CreateAvailabilityDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+// --------------------- Productos pagos + variantes ---------------------
+
+export class CreateProductDto {
+  @ApiProperty({ description: 'Nombre del producto (ej. "Mentoría Estilismo")' })
+  @IsString()
+  name: string;
+
+  @ApiProperty({ required: false, enum: MentorshipProductType, default: 'MENTORSHIP' })
+  @IsOptional()
+  @IsEnum(MentorshipProductType)
+  type?: MentorshipProductType;
+
+  @ApiProperty({ required: false, description: 'Curso asociado (opcional)' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+}
+
+export class UpdateProductDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({ required: false, enum: MentorshipProductType })
+  @IsOptional()
+  @IsEnum(MentorshipProductType)
+  type?: MentorshipProductType;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  categoryId?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+}
+
+export class CreateVariantDto {
+  @ApiProperty({ description: 'Etiqueta (ej. "Transferencia", "Efectivo", "Exterior")' })
+  @IsString()
+  label: string;
+
+  @ApiProperty({ description: 'Monto' })
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @ApiProperty({ required: false, default: 'ARS', enum: ['ARS', 'USD'] })
+  @IsOptional()
+  @IsIn(['ARS', 'USD'])
+  currency?: string;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+}
+
+export class UpdateVariantDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @ApiProperty({ required: false, enum: ['ARS', 'USD'] })
+  @IsOptional()
+  @IsIn(['ARS', 'USD'])
+  currency?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+}
+
+// --------------------- Crédito pago (validación manual) ---------------------
+
+export class GrantCreditDto {
+  @ApiProperty({ description: 'Alumno al que se le otorga el crédito' })
+  @IsString()
+  userId: string;
+
+  @ApiProperty({ required: false, description: 'Producto comprado (deriva tipo/curso/monto)' })
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @ApiProperty({ required: false, description: 'Curso asociado (si no hay producto)' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiProperty({ required: false, enum: MentorshipProductType })
+  @IsOptional()
+  @IsEnum(MentorshipProductType)
+  type?: MentorshipProductType;
+
+  @ApiProperty({ required: false, description: 'Monto pagado (registro)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @ApiProperty({ required: false, enum: ['ARS', 'USD'] })
+  @IsOptional()
+  @IsIn(['ARS', 'USD'])
+  currency?: string;
+
+  @ApiProperty({ required: false, description: 'Nota interna (ej. comprobante)' })
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class UpdateAvailabilityDto {

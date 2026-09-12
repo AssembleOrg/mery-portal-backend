@@ -14,7 +14,12 @@ import { ChatGateway } from '../chat/chat.gateway';
 import {
   BookMentorshipDto,
   CreateAvailabilityDto,
+  CreateProductDto,
+  CreateVariantDto,
+  GrantCreditDto,
   UpdateAvailabilityDto,
+  UpdateProductDto,
+  UpdateVariantDto,
 } from './dto';
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -258,36 +263,58 @@ export class MentorshipService {
   }
 
   /**
-   * Mentoría vigente del alumno en CUALQUIER curso. La mentoría gratuita es una
-   * sola por cuenta: si ya tiene una agendada o cumplida (en la formación que
-   * sea), no puede reservar otra. Las canceladas no cuentan (liberan el cupo).
+   * Mentoría GRATUITA vigente del alumno en cualquier curso (creditId = null).
+   * La gratuita es una sola por cuenta: si ya tiene una agendada/cumplida sin
+   * crédito, para reservar otra necesita un crédito pago. Canceladas no cuentan.
    */
-  private async accountMentorship(userId: string) {
+  private async accountFreeMentorship(userId: string) {
     return this.prisma.mentorship.findFirst({
       where: {
         userId,
+        creditId: null,
         status: { in: [MentorshipStatus.SCHEDULED, MentorshipStatus.COMPLETED] },
       },
     });
   }
 
+  /** Crédito pago disponible para reservar una mentoría online de ese curso. */
+  private async availableCredit(userId: string, categoryId: string) {
+    return this.prisma.mentorshipCredit.findFirst({
+      where: {
+        userId,
+        type: 'MENTORSHIP',
+        status: 'AVAILABLE',
+        OR: [{ categoryId: null }, { categoryId }],
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async getEligibility(userId: string, categoryId: string) {
-    const [purchase, examOk, current, accountAny] = await Promise.all([
+    const [purchase, examOk, current, freeMentorship, credit] = await Promise.all([
       this.activePurchase(userId, categoryId),
       this.examPassed(userId, categoryId),
       this.currentMentorship(userId, categoryId),
-      this.accountMentorship(userId),
+      this.accountFreeMentorship(userId),
+      this.availableCredit(userId, categoryId),
     ]);
     const purchased = !!purchase && purchase.isActive;
-    // Bloqueada porque ya usó su mentoría gratis en OTRA formación.
-    const blockedByOtherCourse = !current && !!accountAny;
+    const freeUsed = !!freeMentorship;
+    const hasCredit = !!credit;
+    // Ya usó la gratuita, no tiene crédito y no tiene una reserva vigente en este
+    // curso → tiene que comprar una mentoría para poder reservar otra.
+    const needsPurchase = !current && freeUsed && !hasCredit;
     return {
       purchased,
       examPassed: examOk,
       alreadyBooked: !!current,
       mentorship: current ? this.serialize(current) : null,
-      blockedByOtherCourse,
-      canBook: purchased && examOk && !accountAny,
+      freeUsed,
+      availableCredits: hasCredit ? 1 : 0,
+      needsPurchase,
+      // Compat con el front: se muestra el CTA de compra cuando needsPurchase.
+      blockedByOtherCourse: needsPurchase,
+      canBook: purchased && examOk && !current && (!freeUsed || hasCredit),
     };
   }
 
@@ -331,14 +358,34 @@ export class MentorshipService {
       );
     }
 
-    // La mentoría gratuita es una sola por cuenta (sin importar la formación).
-    const accountAny = await this.accountMentorship(userId);
-    if (accountAny) {
-      throw new ForbiddenException(
-        accountAny.categoryId === categoryId
-          ? 'Ya tenés una mentoría para este curso'
-          : 'La mentoría gratuita es una sola por cuenta y ya la usaste en otra formación',
-      );
+    // Ya tiene una reserva vigente en este curso.
+    const current = await this.currentMentorship(userId, categoryId);
+    if (current) {
+      throw new ConflictException('Ya tenés una mentoría para este curso');
+    }
+
+    // La mentoría gratuita es una sola por cuenta. Si ya la usó, para reservar
+    // otra necesita un crédito pago (otorgado por admin tras validar el pago).
+    const freeMentorship = await this.accountFreeMentorship(userId);
+    let creditId: string | null = null;
+    if (freeMentorship) {
+      const credit = await this.availableCredit(userId, categoryId);
+      if (!credit) {
+        throw new ForbiddenException(
+          'Ya usaste tu mentoría gratuita. Para reservar otra necesitás comprar una mentoría.',
+        );
+      }
+      // Reserva del crédito con guard optimista contra doble consumo.
+      const claimed = await this.prisma.mentorshipCredit.updateMany({
+        where: { id: credit.id, status: 'AVAILABLE' },
+        data: { status: 'USED' },
+      });
+      if (claimed.count === 0) {
+        throw new ConflictException(
+          'Ese crédito ya fue usado. Actualizá la página e intentá de nuevo.',
+        );
+      }
+      creditId = credit.id;
     }
 
     const slot = await this.findMatchingSlot(dto.start);
@@ -352,12 +399,28 @@ export class MentorshipService {
           scheduledEnd: slot.end,
           status: MentorshipStatus.SCHEDULED,
           meetingEmail: dto.meetingEmail.trim().toLowerCase(),
+          creditId,
         },
       });
+      if (creditId) {
+        await this.prisma.mentorshipCredit.update({
+          where: { id: creditId },
+          data: { mentorshipId: mentorship.id },
+        });
+      }
       await this.attachCalendarEvent(mentorship.id, slot, dto.meetingEmail, categoryId);
       await this.notifyAdmins(mentorship.id, 'reservó');
       return this.serialize(await this.byId(mentorship.id));
     } catch (err) {
+      // Si falló la creación tras haber reservado el crédito, lo liberamos.
+      if (creditId) {
+        await this.prisma.mentorshipCredit
+          .updateMany({
+            where: { id: creditId, status: 'USED', mentorshipId: null },
+            data: { status: 'AVAILABLE' },
+          })
+          .catch(() => undefined);
+      }
       // Índices únicos parciales: race condition o mentoría ya existente.
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -430,6 +493,7 @@ export class MentorshipService {
       where: { id: mentorshipId },
       data: { status: MentorshipStatus.CANCELLED },
     });
+    await this.releaseCreditIfAny(mentorship.creditId);
     if (mentorship.googleEventId) {
       await this.calendar.deleteEvent(mentorship.googleEventId);
     }
@@ -447,10 +511,22 @@ export class MentorshipService {
       where: { id: mentorshipId },
       data: { status: MentorshipStatus.CANCELLED },
     });
+    await this.releaseCreditIfAny(m.creditId);
     if (m.googleEventId) {
       await this.calendar.deleteEvent(m.googleEventId);
     }
     return { cancelled: true };
+  }
+
+  /** Si la mentoría cancelada venía de un crédito pago, lo devuelve a AVAILABLE. */
+  private async releaseCreditIfAny(creditId: string | null) {
+    if (!creditId) return;
+    await this.prisma.mentorshipCredit
+      .update({
+        where: { id: creditId },
+        data: { status: 'AVAILABLE', mentorshipId: null },
+      })
+      .catch(() => undefined);
   }
 
   /**
@@ -607,6 +683,186 @@ export class MentorshipService {
       data: { status: MentorshipStatus.COMPLETED },
     });
     return { completed: count };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Productos pagos + variantes (editables desde admin) y créditos
+  // ---------------------------------------------------------------------------
+
+  /** Catálogo público: productos activos con sus variantes activas. */
+  async listProductsPublic() {
+    const products = await this.prisma.mentorshipProduct.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        variants: {
+          where: { isActive: true },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
+    });
+    return products;
+  }
+
+  /** Catálogo admin: todos los productos (activos o no) con todas las variantes. */
+  listProductsAdmin() {
+    return this.prisma.mentorshipProduct.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        variants: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+      },
+    });
+  }
+
+  createProduct(dto: CreateProductDto) {
+    return this.prisma.mentorshipProduct.create({
+      data: {
+        name: dto.name,
+        type: dto.type ?? 'MENTORSHIP',
+        categoryId: dto.categoryId ?? null,
+        description: dto.description ?? null,
+        isActive: dto.isActive ?? true,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+      include: { variants: true },
+    });
+  }
+
+  async updateProduct(id: string, dto: UpdateProductDto) {
+    await this.getProductOrFail(id);
+    return this.prisma.mentorshipProduct.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+      },
+      include: { variants: true },
+    });
+  }
+
+  async removeProduct(id: string) {
+    await this.getProductOrFail(id);
+    await this.prisma.mentorshipProduct.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  async addVariant(productId: string, dto: CreateVariantDto) {
+    await this.getProductOrFail(productId);
+    return this.prisma.mentorshipPriceVariant.create({
+      data: {
+        productId,
+        label: dto.label,
+        amount: new Prisma.Decimal(dto.amount),
+        currency: dto.currency ?? 'ARS',
+        isActive: dto.isActive ?? true,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+  }
+
+  async updateVariant(id: string, dto: UpdateVariantDto) {
+    await this.getVariantOrFail(id);
+    return this.prisma.mentorshipPriceVariant.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label } : {}),
+        ...(dto.amount !== undefined ? { amount: new Prisma.Decimal(dto.amount) } : {}),
+        ...(dto.currency !== undefined ? { currency: dto.currency } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+      },
+    });
+  }
+
+  async removeVariant(id: string) {
+    await this.getVariantOrFail(id);
+    await this.prisma.mentorshipPriceVariant.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  private async getProductOrFail(id: string) {
+    const p = await this.prisma.mentorshipProduct.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('Producto no encontrado');
+    return p;
+  }
+
+  private async getVariantOrFail(id: string) {
+    const v = await this.prisma.mentorshipPriceVariant.findUnique({ where: { id } });
+    if (!v) throw new NotFoundException('Variante no encontrada');
+    return v;
+  }
+
+  // --------------------- Créditos (validación manual) ---------------------
+
+  /** Otorga un crédito pago tras validar la transferencia (desde admin). */
+  async grantCredit(dto: GrantCreditDto, grantedById?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
+    if (!user) throw new NotFoundException('Usuaria no encontrada');
+
+    let type = dto.type ?? 'MENTORSHIP';
+    let categoryId = dto.categoryId ?? null;
+    let amount = dto.amount;
+    let currency = dto.currency;
+
+    if (dto.productId) {
+      const product = await this.prisma.mentorshipProduct.findUnique({
+        where: { id: dto.productId },
+      });
+      if (!product) throw new NotFoundException('Producto no encontrado');
+      type = product.type;
+      categoryId = categoryId ?? product.categoryId;
+    }
+
+    return this.prisma.mentorshipCredit.create({
+      data: {
+        userId: dto.userId,
+        productId: dto.productId ?? null,
+        categoryId,
+        type,
+        amount: amount != null ? new Prisma.Decimal(amount) : null,
+        currency: currency ?? null,
+        note: dto.note ?? null,
+        grantedById: grantedById ?? null,
+      },
+    });
+  }
+
+  /** Créditos de un alumno (para el admin). */
+  listCredits(userId: string) {
+    return this.prisma.mentorshipCredit.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: { select: { id: true, name: true, type: true } },
+      },
+    });
+  }
+
+  /** Créditos disponibles del alumno logueado (para mostrar en su cuenta). */
+  listMyCredits(userId: string) {
+    return this.prisma.mentorshipCredit.findMany({
+      where: { userId, status: 'AVAILABLE' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: { select: { id: true, name: true, type: true } },
+      },
+    });
+  }
+
+  async revokeCredit(id: string) {
+    const credit = await this.prisma.mentorshipCredit.findUnique({ where: { id } });
+    if (!credit) throw new NotFoundException('Crédito no encontrado');
+    if (credit.status === 'USED') {
+      throw new BadRequestException('No se puede borrar un crédito ya usado');
+    }
+    await this.prisma.mentorshipCredit.delete({ where: { id } });
+    return { deleted: true };
   }
 
   private serialize(m: {

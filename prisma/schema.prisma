@@ -50,6 +50,7 @@ model User {
   chatTokenEvents   ChatTokenEvent[]   @relation("ChatTokenEventAdmin")
   coupons           Coupon[]           @relation("UserCoupons")
   mentorships       Mentorship[]
+  mentorshipCredits MentorshipCredit[]
 
   // Audit fields
   createdAt DateTime  @default(now())
@@ -112,13 +113,14 @@ model VideoCategory {
   originalPriceUSD Decimal? @db.Decimal(10, 2)
   isFree           Boolean  @default(false)
 
-  videos       Video[]
-  purchases    CategoryPurchase[]
-  cartItems    CartItem[]
-  coupons      CouponCategory[]
-  chatRooms    ChatRoom[]
-  quizAttempts QuizAttempt[]
-  mentorships  Mentorship[]
+  videos             Video[]
+  purchases          CategoryPurchase[]
+  cartItems          CartItem[]
+  coupons            CouponCategory[]
+  chatRooms          ChatRoom[]
+  quizAttempts       QuizAttempt[]
+  mentorships        Mentorship[]
+  mentorshipProducts MentorshipProduct[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -419,6 +421,10 @@ model Mentorship {
   googleEventId  String?
   googleMeetLink String?
 
+  // null = mentoría gratuita (1 por cuenta). Si viene de un crédito pago,
+  // apunta al MentorshipCredit consumido.
+  creditId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -427,6 +433,88 @@ model Mentorship {
   @@index([scheduledStart])
   @@index([status])
   @@map("mentorships")
+}
+
+/// Tipo de producto pago de mentoría/clase.
+enum MentorshipProductType {
+  MENTORSHIP // mentoría online (se reserva por calendario, consume crédito)
+  ONE_TO_ONE // clase presencial one-to-one (se coordina, no usa el calendario)
+}
+
+/// Estado de un crédito pago (habilita reservar/coordinar una vez).
+enum MentorshipCreditStatus {
+  AVAILABLE
+  USED
+}
+
+/// Producto pago editable desde el admin (mentoría online o clase one-to-one).
+/// Cada producto tiene una o más variantes de precio (transferencia, efectivo,
+/// exterior en USD, etc.). La validación del pago es MANUAL desde el admin.
+model MentorshipProduct {
+  id          String                @id @default(cuid())
+  categoryId  String?
+  category    VideoCategory?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name        String
+  description String?
+  type        MentorshipProductType @default(MENTORSHIP)
+  isActive    Boolean               @default(true)
+  sortOrder   Int                   @default(0)
+
+  variants MentorshipPriceVariant[]
+  credits  MentorshipCredit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("mentorship_products")
+}
+
+/// Variante de precio de un producto (ej. "Transferencia" $150.000,
+/// "Efectivo" USD 400, "Exterior" USD 150).
+model MentorshipPriceVariant {
+  id        String            @id @default(cuid())
+  productId String
+  product   MentorshipProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String // "Transferencia", "Efectivo", "Exterior"
+  amount    Decimal           @db.Decimal(10, 2)
+  currency  String            @default("ARS") // "ARS" | "USD"
+  isActive  Boolean           @default(true)
+  sortOrder Int               @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@map("mentorship_price_variants")
+}
+
+/// Crédito pago otorgado manualmente por el admin tras validar la transferencia.
+/// Habilita al alumno a reservar (MENTORSHIP) o a que se coordine (ONE_TO_ONE)
+/// una vez. Se consume al reservar la mentoría online.
+model MentorshipCredit {
+  id           String                 @id @default(cuid())
+  userId       String
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      MentorshipProduct?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  categoryId   String?
+  type         MentorshipProductType  @default(MENTORSHIP)
+  amount       Decimal?               @db.Decimal(10, 2)
+  currency     String? // "ARS" | "USD"
+  note         String?
+  status       MentorshipCreditStatus @default(AVAILABLE)
+  mentorshipId String? // mentoría online que consumió el crédito
+  grantedById  String? // admin que lo otorgó
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([categoryId])
+  @@map("mentorship_credits")
 }
 
 // ============================================================================

@@ -18,8 +18,13 @@ import { MentorshipService } from './mentorship.service';
 import {
   BookMentorshipDto,
   CreateAvailabilityDto,
+  CreateProductDto,
+  CreateVariantDto,
+  GrantCreditDto,
   RescheduleMentorshipDto,
   UpdateAvailabilityDto,
+  UpdateProductDto,
+  UpdateVariantDto,
 } from './dto';
 
 @ApiTags('mentorship')
@@ -68,7 +73,93 @@ export class MentorshipController {
     return this.mentorship.cancel(user.sub, id);
   }
 
+  // Catálogo público de productos pagos (mentorías / one-to-one) con variantes.
+  @Get('products')
+  products() {
+    return this.mentorship.listProductsPublic();
+  }
+
+  // Créditos pagos disponibles del alumno logueado.
+  @Get('my-credits')
+  myCredits(@CurrentUser() user: JwtPayload) {
+    return this.mentorship.listMyCredits(user.sub);
+  }
+
   // --------------------- Admin ---------------------
+
+  // ----- Productos + variantes (catálogo editable) -----
+
+  @Get('admin/products')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  adminProducts() {
+    return this.mentorship.listProductsAdmin();
+  }
+
+  @Post('admin/products')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  createProduct(@Body() dto: CreateProductDto) {
+    return this.mentorship.createProduct(dto);
+  }
+
+  @Patch('admin/products/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  updateProduct(@Param('id') id: string, @Body() dto: UpdateProductDto) {
+    return this.mentorship.updateProduct(id, dto);
+  }
+
+  @Delete('admin/products/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  removeProduct(@Param('id') id: string) {
+    return this.mentorship.removeProduct(id);
+  }
+
+  @Post('admin/products/:id/variants')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  addVariant(@Param('id') id: string, @Body() dto: CreateVariantDto) {
+    return this.mentorship.addVariant(id, dto);
+  }
+
+  @Patch('admin/variants/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  updateVariant(@Param('id') id: string, @Body() dto: UpdateVariantDto) {
+    return this.mentorship.updateVariant(id, dto);
+  }
+
+  @Delete('admin/variants/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  removeVariant(@Param('id') id: string) {
+    return this.mentorship.removeVariant(id);
+  }
+
+  // ----- Créditos pagos (validación manual del pago) -----
+
+  @Get('admin/credits')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  listCredits(@Query('userId') userId: string) {
+    return this.mentorship.listCredits(userId);
+  }
+
+  @Post('admin/credits')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  grantCredit(@CurrentUser() user: JwtPayload, @Body() dto: GrantCreditDto) {
+    return this.mentorship.grantCredit(dto, user.sub);
+  }
+
+  @Delete('admin/credits/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  revokeCredit(@Param('id') id: string) {
+    return this.mentorship.revokeCredit(id);
+  }
 
   @Get('admin/calendar')
   @UseGuards(RolesGuard)
