@@ -333,7 +333,8 @@ export class MentorshipService {
       needsPurchase,
       // Compat con el front: se muestra el CTA de compra cuando needsPurchase.
       blockedByOtherCourse: needsPurchase,
-      canBook: purchased && examOk && !current && (!freeUsed || hasCredit),
+      // El examen no condiciona la reserva: examPassed viaja solo como dato.
+      canBook: purchased && !current && (!freeUsed || hasCredit),
     };
   }
 
@@ -364,17 +365,9 @@ export class MentorshipService {
 
   async book(userId: string, dto: BookMentorshipDto) {
     const { categoryId } = dto;
-    const [purchase, examOk] = await Promise.all([
-      this.activePurchase(userId, categoryId),
-      this.examPassed(userId, categoryId),
-    ]);
+    const purchase = await this.activePurchase(userId, categoryId);
     if (!purchase || !purchase.isActive) {
       throw new ForbiddenException('No tenés una compra activa de este curso');
-    }
-    if (!examOk) {
-      throw new ForbiddenException(
-        'Primero tenés que aprobar el examen final del curso',
-      );
     }
 
     // Ya tiene una reserva vigente en este curso.

@@ -168,14 +168,13 @@ export class ChatService {
         continue;
       }
 
-      // Gate de apertura: 95% de progreso + examen aprobado (si aplica) + haber
-      // tenido la mentoría del curso. El vencimiento por vida del chat lo
+      // Gate de apertura: 95% de progreso + haber tenido la mentoría del curso.
+      // El examen NO bloquea: se sigue rindiendo y se informa el porcentaje de
+      // acierto (quizRequired/quizPassed viajan al front), pero no condiciona el
+      // acceso a los pasos siguientes. El vencimiento por vida del chat lo
       // resuelve ensureRoom con la fecha real de desbloqueo (unlockedAt).
       const gateMet =
-        videosTotal > 0 &&
-        videosCompleted === videosTotal &&
-        (!quizRequired || quizPassed) &&
-        mentorshipCompleted;
+        videosTotal > 0 && videosCompleted === videosTotal && mentorshipCompleted;
 
       result.set(categoryId, {
         status: gateMet ? ChatRoomStatus.ACTIVE : ChatRoomStatus.LOCKED,
