@@ -103,6 +103,35 @@ export class PresencialEmailService {
     );
   }
 
+  /**
+   * Reprogramación: la fecha se mueve y la alumna conserva su lugar. El mail
+   * tiene que dejar clarísimo que NO hay que hacer nada ni volver a pagar.
+   */
+  async sendClassRescheduled(
+    to: { email: string; name: string },
+    cls: PresencialEmailClass,
+    previousWhen: string,
+    depositCovered: boolean,
+  ) {
+    await this.send(
+      to,
+      `Nueva fecha para tu clase presencial: ${cls.title}`,
+      `${this.greet(to.name)}
+       <h2 style="color:${BRAND};margin:8px 0">Movimos tu clase presencial</h2>
+       <p>La clase que tenías reservada cambió de fecha. Tu lugar sigue siendo tuyo:
+          no tenés que volver a anotarte.</p>
+       <p style="color:#8a6a70;text-decoration:line-through;text-transform:capitalize;margin:16px 0 0">
+          ${previousWhen}</p>
+       ${this.classBlock(cls)}
+       ${
+         depositCovered
+           ? '<p><strong>Tu seña ya está cubierta</strong> y se trasladó a esta nueva fecha, sin costo extra.</p>'
+           : ''
+       }
+       <p>Si esta fecha no te sirve, escribinos y lo vemos.</p>`,
+    );
+  }
+
   async sendClassCancelled(to: { email: string; name: string }, cls: PresencialEmailClass) {
     await this.send(
       to,

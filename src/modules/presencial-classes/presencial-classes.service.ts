@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   PresencialClassStatus,
+  PresencialDepositStatus,
   PresencialSignupStatus,
   Prisma,
 } from '@prisma/client';
@@ -15,7 +16,11 @@ import { PrismaService } from '../../shared/services';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PresencialEmailService } from './presencial-email.service';
-import { CreatePresencialClassDto, UpdatePresencialClassDto } from './dto';
+import {
+  CreatePresencialClassDto,
+  ReschedulePresencialClassDto,
+  UpdatePresencialClassDto,
+} from './dto';
 
 const TZ = 'America/Argentina/Buenos_Aires';
 const AR_OFFSET = '-03:00';
@@ -586,6 +591,104 @@ export class PresencialClassesService {
     );
     this.logger.log(`Clase ${cls.title} confirmada · ${pending.length} inscriptas avisadas`);
     return { confirmed: true, notified: pending.length };
+  }
+
+  /**
+   * Mueve la fecha/horario de la clase conservando las inscripciones. Es lo que
+   * promete el disclaimer de la seña: el lugar y lo pagado se trasladan, la
+   * alumna no tiene que volver a anotarse ni a pagar.
+   *
+   * Vuelve a TENTATIVE aunque estuviera confirmada (la fecha nueva todavía no
+   * lo está) y las inscriptas vuelven a PENDING, así el flujo normal de
+   * confirmación se repite sobre la fecha nueva.
+   */
+  async rescheduleClass(
+    id: string,
+    dto: { date: string; startHour: number; endHour: number },
+  ) {
+    const cls = await this.byId(id);
+    if (!ACTIVE_CLASS.includes(cls.status)) {
+      throw new BadRequestException('La clase no está activa');
+    }
+
+    this.assertHours(dto.startHour, dto.endHour);
+    const startAt = this.atAR(dto.date, dto.startHour);
+    const endAt = this.atAR(dto.date, dto.endHour);
+    this.assertWithinHorizon(startAt);
+
+    if (
+      startAt.getTime() === cls.startAt.getTime() &&
+      endAt.getTime() === cls.endAt.getTime()
+    ) {
+      throw new BadRequestException('La fecha y el horario son los mismos');
+    }
+
+    const previousWhen = this.whenLabel(cls);
+    const active = await this.prisma.presencialSignup.findMany({
+      where: { classId: id, status: { in: ACTIVE_SIGNUP } },
+      include: { user: { select: userSelect } },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.presencialClass.update({
+        where: { id },
+        data: {
+          startAt,
+          endAt,
+          startHour: dto.startHour,
+          endHour: dto.endHour,
+          status: PresencialClassStatus.TENTATIVE,
+          confirmedAt: null,
+        },
+      }),
+      // Las señas NO se tocan: depositStatus y montos quedan como estaban.
+      this.prisma.presencialSignup.updateMany({
+        where: { classId: id, status: PresencialSignupStatus.CONFIRMED },
+        data: { status: PresencialSignupStatus.PENDING, confirmedAt: null },
+      }),
+    ]);
+
+    const moved = await this.byId(id);
+    const info = this.emailClass(moved);
+
+    await Promise.allSettled(
+      active.map((s) =>
+        this.email.sendClassRescheduled(
+          { email: s.user.email, name: s.user.firstName ?? '' },
+          info,
+          previousWhen,
+          s.depositStatus === PresencialDepositStatus.PAID,
+        ),
+      ),
+    );
+    this.gateway.broadcastPresencialEvent(
+      {
+        type: 'rescheduled',
+        classId: moved.id,
+        title: moved.title,
+        start: moved.startAt.toISOString(),
+      },
+      active.map((s) => s.userId),
+    );
+    await this.notifications.notifyMany(
+      active.map((s) => s.userId),
+      {
+        type: 'presencial_rescheduled',
+        title: `Nueva fecha para ${moved.title}`,
+        body: `${this.whenLabel(moved)} · tu lugar y tu seña se trasladan`,
+        url: '/es/presencialidad',
+        data: { classId: moved.id },
+      },
+    );
+
+    this.logger.log(
+      `Clase ${moved.title} reprogramada (${previousWhen} → ${this.whenLabel(moved)}) · ${active.length} inscriptas avisadas`,
+    );
+    return {
+      rescheduled: true,
+      notified: active.length,
+      class: this.serialize(moved),
+    };
   }
 
   /** Cancela la fecha; todas las activas quedan CANCELLED y se les avisa. */

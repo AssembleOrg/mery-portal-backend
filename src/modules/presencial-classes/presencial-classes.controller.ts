@@ -20,6 +20,7 @@ import { SettingsService } from '../settings/settings.service';
 import {
   CreatePresencialClassDto,
   CreatePresencialPriceDto,
+  ReschedulePresencialClassDto,
   SignupDto,
   StartDepositDto,
   UpdatePresencialClassDto,
@@ -165,6 +166,18 @@ export class PresencialClassesController {
   @Auditory({ action: 'CONFIRM', entity: 'PresencialClass' })
   confirmClass(@Param('id') id: string) {
     return this.service.confirmClass(id);
+  }
+
+  /** Mueve la fecha conservando inscripciones y señas. Avisa a las alumnas. */
+  @Post('admin/:id/reschedule')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  @Auditory({ action: 'UPDATE', entity: 'PresencialClass' })
+  rescheduleClass(
+    @Param('id') id: string,
+    @Body() dto: ReschedulePresencialClassDto,
+  ) {
+    return this.service.rescheduleClass(id, dto);
   }
 
   @Post('admin/:id/cancel')

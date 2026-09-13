@@ -181,3 +181,21 @@ export class UpdatePresencialPriceDto {
   @IsInt()
   sortOrder?: number;
 }
+
+export class ReschedulePresencialClassDto {
+  @ApiProperty({ description: 'Nueva fecha YYYY-MM-DD (hora Argentina)' })
+  @Matches(DATE_RE, { message: 'date debe ser YYYY-MM-DD' })
+  date: string;
+
+  @ApiProperty({ description: 'Nueva hora de inicio (9..17)' })
+  @IsInt()
+  @Min(9)
+  @Max(17)
+  startHour: number;
+
+  @ApiProperty({ description: 'Nueva hora de fin (10..18)' })
+  @IsInt()
+  @Min(10)
+  @Max(18)
+  endHour: number;
+}

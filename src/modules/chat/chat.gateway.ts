@@ -294,7 +294,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   broadcastPresencialEvent(
     payload: {
-      type: 'signup' | 'signup_cancelled' | 'confirmed' | 'rejected' | 'class_cancelled';
+      type:
+        | 'signup'
+        | 'signup_cancelled'
+        | 'confirmed'
+        | 'rejected'
+        | 'class_cancelled'
+        | 'rescheduled';
       classId: string;
       title: string;
       start: string;
