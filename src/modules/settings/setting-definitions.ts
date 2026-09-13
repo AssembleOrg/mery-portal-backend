@@ -92,10 +92,10 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     key: PRESENCIAL_DEPOSIT_DISCLAIMER_KEY,
     label: 'Disclaimer de la seña (presenciales)',
     description:
-      'Texto que la alumna tiene que aceptar ANTES de ir a pagar la seña. Se muestra en el popup de reserva.',
+      'Texto que la alumna tiene que aceptar ANTES de ir a pagar la seña. Se muestra en el popup de reserva. Dejá una línea en blanco entre párrafos.',
     type: 'string',
     defaultValue:
-      'Al señar estás reservando tu derecho a participar de una clase presencial, no una fecha y horario definitivos. La fecha puede cambiar a otro día u horario. Te vamos a confirmar si la clase se realiza en ese turno hasta 15 días antes.',
+      'Al pagar la seña reservás tu lugar en una clase presencial. La fecha y el horario que ves ahora son tentativos: te confirmamos hasta 15 días antes si la clase se dicta en ese turno.\n\nSi esa fecha se reprograma, tu lugar y tu seña se trasladan a la nueva fecha, sin costo extra y sin que tengas que volver a reservar. Te avisamos por email y en la app para que puedas acomodarte.',
     max: 1500,
   },
   {
