@@ -16,10 +16,18 @@ export interface SettingDefinition {
   defaultValue: string;
   min?: number;
   max?: number;
+  /** Solo para type 'string': valores admitidos (se renderiza como select). */
+  allowedValues?: string[];
 }
 
 export const CHAT_LIFETIME_DAYS_KEY = 'chat.lifetimeDays';
 export const CHAT_CLOSING_MESSAGE_KEY = 'chat.closingMessage';
+
+// Señas de clases presenciales: cotización del dólar y disclaimer previo al pago.
+export const PRESENCIAL_DOLLAR_MODE_KEY = 'presencial.dollarMode';
+export const PRESENCIAL_DOLLAR_RATE_FIXED_KEY = 'presencial.dollarRateFixed';
+export const PRESENCIAL_DOLLAR_RATE_CACHED_KEY = 'presencial.dollarRateCached';
+export const PRESENCIAL_DEPOSIT_DISCLAIMER_KEY = 'presencial.depositDisclaimer';
 
 // Promo global fija (sin cupón): descuento automático + tope de cuotas para
 // cualquier compra en pesos mientras esté activa.
@@ -50,6 +58,45 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     defaultValue:
       '¡Gracias por haber sido parte de esta formación! Este chat se cierra acá, pero seguimos en contacto por redes y por mail para lo que necesites. Te deseamos muchos éxitos. 💕',
     max: 1000,
+  },
+  {
+    key: PRESENCIAL_DOLLAR_MODE_KEY,
+    label: 'Cotización del dólar (presenciales)',
+    description:
+      'De dónde sale el dólar para convertir las señas en USD. "fijo" usa el valor que cargues acá abajo; "api" lo trae de mery-garcia-backend una vez por día (si falla, cae al valor fijo).',
+    type: 'string',
+    defaultValue: 'fixed',
+    allowedValues: ['fixed', 'api'],
+  },
+  {
+    key: PRESENCIAL_DOLLAR_RATE_FIXED_KEY,
+    label: 'Dólar fijo (pesos por USD)',
+    description:
+      'Valor usado cuando la cotización está en modo "fijo", y también como respaldo si la API no responde.',
+    type: 'int',
+    defaultValue: '1200',
+    min: 1,
+    max: 1000000,
+  },
+  {
+    key: PRESENCIAL_DOLLAR_RATE_CACHED_KEY,
+    label: 'Última cotización traída de la API',
+    description:
+      'Se actualiza sola una vez por día cuando el modo es "api". 0 = todavía no se pudo traer ninguna. Podés editarla, pero la próxima actualización la pisa.',
+    type: 'int',
+    defaultValue: '0',
+    min: 0,
+    max: 1000000,
+  },
+  {
+    key: PRESENCIAL_DEPOSIT_DISCLAIMER_KEY,
+    label: 'Disclaimer de la seña (presenciales)',
+    description:
+      'Texto que la alumna tiene que aceptar ANTES de ir a pagar la seña. Se muestra en el popup de reserva.',
+    type: 'string',
+    defaultValue:
+      'Al señar estás reservando tu derecho a participar de una clase presencial, no una fecha y horario definitivos. La fecha puede cambiar a otro día u horario. Te vamos a confirmar si la clase se realiza en ese turno hasta 15 días antes.',
+    max: 1500,
   },
   {
     key: CHECKOUT_PROMO_ACTIVE_KEY,

@@ -7,6 +7,7 @@ import { WebhookNotificationDto, MercadoPagoPaymentDto } from './dto';
 import { CartService } from '../cart/cart.service';
 import { ChatService } from '../chat/chat.service';
 import { RewardsService } from '../rewards/rewards.service';
+import { PresencialDepositsService } from '../presencial-classes/presencial-deposits.service';
 
 @Injectable()
 export class MercadoPagoService {
@@ -24,6 +25,7 @@ export class MercadoPagoService {
     private cartService: CartService,
     private chatService: ChatService,
     private rewardsService: RewardsService,
+    private presencialDeposits: PresencialDepositsService,
   ) {
     this.accessToken = this.configService.get<string>('MP_ACCESS_TOKEN') || '';
     this.webhookSecret = this.configService.get<string>('MP_WEBHOOK_SECRET') || '';
@@ -165,7 +167,21 @@ export class MercadoPagoService {
    */
   private async handleApprovedPayment(payment: MercadoPagoPaymentDto): Promise<void> {
     const transactionId = payment.id.toString();
-    
+
+    // Las señas de clases presenciales no otorgan acceso a cursos: se marcan
+    // aparte y salen por acá antes de buscar category_ids.
+    if (payment.metadata?.type === 'presencial_deposit') {
+      const signupId =
+        payment.metadata?.signup_id ||
+        payment.external_reference?.replace(/^presencial_/, '');
+      if (!signupId) {
+        this.logger.error(`❌ Seña ${payment.id} sin signup_id`);
+        return;
+      }
+      await this.presencialDeposits.markPaid(signupId, transactionId);
+      return;
+    }
+
     try {
       // Extract metadata with better fallback handling
       const userId = payment.metadata?.user_id || payment.external_reference?.split('_')[0];

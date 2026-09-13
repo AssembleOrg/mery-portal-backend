@@ -45,6 +45,7 @@ const classInclude = {
   categories: {
     include: { category: { select: { id: true, name: true, slug: true } } },
   },
+  price: true,
 } as const;
 
 type ClassRow = Prisma.PresencialClassGetPayload<{ include: typeof classInclude }>;
@@ -152,6 +153,17 @@ export class PresencialClassesService {
       restrictToStudents: c.restrictToStudents,
       confirmedAt: c.confirmedAt ? c.confirmedAt.toISOString() : null,
       categories: c.categories.map((cc) => cc.category),
+      // Seña de lista. El monto en pesos que se cobra lo calcula el backend al
+      // iniciar el pago; acá va solo para mostrar.
+      price: c.price
+        ? {
+            id: c.price.id,
+            name: c.price.name,
+            amountUSD: c.price.amountUSD != null ? Number(c.price.amountUSD) : null,
+            amountARS: c.price.amountARS != null ? Number(c.price.amountARS) : null,
+            isActive: c.price.isActive,
+          }
+        : null,
     };
   }
 
@@ -205,7 +217,13 @@ export class PresencialClassesService {
       }),
       this.prisma.presencialSignup.findMany({
         where: { userId },
-        select: { id: true, classId: true, status: true },
+        select: {
+          id: true,
+          classId: true,
+          status: true,
+          depositStatus: true,
+          depositAmountARS: true,
+        },
       }),
     ]);
     const owned = new Set(purchases.map((p) => p.categoryId));
@@ -221,7 +239,15 @@ export class PresencialClassesService {
         const s = signupByClass.get(c.id);
         return {
           ...this.serialize(c),
-          mySignup: s ? { id: s.id, status: s.status } : null,
+          mySignup: s
+            ? {
+                id: s.id,
+                status: s.status,
+                depositStatus: s.depositStatus,
+                depositAmountARS:
+                  s.depositAmountARS != null ? Number(s.depositAmountARS) : null,
+              }
+            : null,
         };
       });
   }
@@ -239,6 +265,10 @@ export class PresencialClassesService {
       note: s.note,
       confirmedAt: s.confirmedAt ? s.confirmedAt.toISOString() : null,
       createdAt: s.createdAt.toISOString(),
+      depositStatus: s.depositStatus,
+      depositAmountARS:
+        s.depositAmountARS != null ? Number(s.depositAmountARS) : null,
+      depositPaidAt: s.depositPaidAt ? s.depositPaidAt.toISOString() : null,
       class: this.serialize(s.class),
     }));
   }
@@ -434,6 +464,7 @@ export class PresencialClassesService {
         startHour: dto.startHour,
         endHour: dto.endHour,
         restrictToStudents: dto.restrictToStudents ?? false,
+        priceId: dto.priceId ?? null,
         categories: {
           create: categoryIds.map((categoryId) => ({ categoryId })),
         },
@@ -470,6 +501,7 @@ export class PresencialClassesService {
         ...(dto.restrictToStudents !== undefined
           ? { restrictToStudents: dto.restrictToStudents }
           : {}),
+        ...(dto.priceId !== undefined ? { priceId: dto.priceId || null } : {}),
         ...(dto.categoryIds
           ? {
               categories: {

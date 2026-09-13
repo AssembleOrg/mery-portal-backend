@@ -2,6 +2,10 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../../shared/services';
 import {
   CHAT_CLOSING_MESSAGE_KEY,
+  PRESENCIAL_DEPOSIT_DISCLAIMER_KEY,
+  PRESENCIAL_DOLLAR_MODE_KEY,
+  PRESENCIAL_DOLLAR_RATE_CACHED_KEY,
+  PRESENCIAL_DOLLAR_RATE_FIXED_KEY,
   CHAT_LIFETIME_DAYS_KEY,
   CHECKOUT_PROMO_ACTIVE_KEY,
   CHECKOUT_PROMO_DISCOUNT_KEY,
@@ -56,6 +60,11 @@ export class SettingsService {
       return raw === 'true' || raw === '1' ? 'true' : 'false';
     }
     const text = raw.trim();
+    if (def.allowedValues && !def.allowedValues.includes(text)) {
+      throw new BadRequestException(
+        `"${def.label}" solo admite: ${def.allowedValues.join(', ')}`,
+      );
+    }
     if (def.max !== undefined && text.length > def.max) {
       throw new BadRequestException(
         `"${def.label}" no puede superar los ${def.max} caracteres`,
@@ -93,6 +102,45 @@ export class SettingsService {
 
   async getString(key: string): Promise<string> {
     return this.getRaw(key);
+  }
+
+  /** Texto del disclaimer que se acepta antes de pagar la seña. */
+  async getPresencialDepositDisclaimer(): Promise<string> {
+    return (await this.getString(PRESENCIAL_DEPOSIT_DISCLAIMER_KEY)).trim();
+  }
+
+  /**
+   * Cotización vigente para convertir señas en USD a pesos. En modo "api" usa
+   * la última traída por el cron; si todavía no hay ninguna, cae al valor fijo
+   * para no dejar el pago sin precio.
+   */
+  async getPresencialDollarRate(): Promise<{
+    rate: number;
+    mode: 'fixed' | 'api';
+    fallback: boolean;
+  }> {
+    const [mode, fixed, cached] = await Promise.all([
+      this.getString(PRESENCIAL_DOLLAR_MODE_KEY),
+      this.getNumber(PRESENCIAL_DOLLAR_RATE_FIXED_KEY),
+      this.getNumber(PRESENCIAL_DOLLAR_RATE_CACHED_KEY),
+    ]);
+    if (mode === 'api' && cached > 0) {
+      return { rate: cached, mode: 'api', fallback: false };
+    }
+    return {
+      rate: fixed,
+      mode: mode === 'api' ? 'api' : 'fixed',
+      fallback: mode === 'api',
+    };
+  }
+
+  async isPresencialDollarFromApi(): Promise<boolean> {
+    return (await this.getString(PRESENCIAL_DOLLAR_MODE_KEY)) === 'api';
+  }
+
+  /** Guarda la cotización traída por el cron. */
+  async setPresencialCachedDollarRate(rate: number): Promise<void> {
+    await this.set(PRESENCIAL_DOLLAR_RATE_CACHED_KEY, String(Math.round(rate)));
   }
 
   /** Texto de despedida del chat. Vacío = no se manda nada al cerrar. */

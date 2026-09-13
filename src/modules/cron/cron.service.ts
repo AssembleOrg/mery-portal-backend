@@ -4,6 +4,7 @@ import { PrismaService } from '../../shared/services';
 import { CouponsService } from '../coupons/coupons.service';
 import { ChatService } from '../chat/chat.service';
 import { MentorshipService } from '../mentorship/mentorship.service';
+import { DollarRateService } from '../presencial-classes/dollar-rate.service';
 import { PresencialClassesService } from '../presencial-classes/presencial-classes.service';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class CronService {
     private readonly chatService: ChatService,
     private readonly mentorshipService: MentorshipService,
     private readonly presencialService: PresencialClassesService,
+    private readonly dollarRate: DollarRateService,
   ) {}
 
   /** Cierra clases presenciales ya pasadas (y sus inscripciones) → COMPLETED. */
@@ -234,5 +236,22 @@ export class CronService {
       this.logger.error('❌ [CRON] Error completando mentorías:', error);
     }
   }
-}
 
+  /**
+   * Cotización del dólar para las señas de presenciales. Una vez por día, a la
+   * mañana temprano. Solo hace algo si el modo está en "api"; si falla, queda
+   * la cotización anterior (o el dólar fijo).
+   */
+  @Cron('0 8 * * *', {
+    name: 'refresh-presencial-dollar-rate',
+    timeZone: 'America/Argentina/Buenos_Aires',
+  })
+  async refreshDollarRate() {
+    const { rate, reason } = await this.dollarRate.refresh();
+    if (rate) {
+      this.logger.log(`💵 [CRON] Cotización del dólar actualizada: $${Math.round(rate)}`);
+    } else if (reason && reason !== 'modo fijo') {
+      this.logger.warn(`💵 [CRON] No se actualizó la cotización: ${reason}`);
+    }
+  }
+}

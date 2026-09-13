@@ -533,12 +533,40 @@ enum PresencialClassStatus {
   COMPLETED // ya pasó (cron)
 }
 
+/// Estado de la seña de una inscripción a clase presencial.
+enum PresencialDepositStatus {
+  NONE // la clase no cobra seña (o la inscripción es previa al sistema de señas)
+  PENDING // se generó la preference de MP, falta que pague
+  PAID
+  FAILED // MP rechazó el pago
+}
+
 enum PresencialSignupStatus {
   PENDING // anotada, esperando confirmación
   CONFIRMED
   REJECTED // el admin no le dio lugar
   CANCELLED // la alumna se bajó (o se canceló la clase)
   COMPLETED // la clase ya pasó (cron)
+}
+
+/// Listado de señas editable desde el admin. Cada clase presencial apunta a
+/// una; una clase sin precio no se puede señar (y por lo tanto no se reserva).
+/// Si amountARS está cargado se cobra ese monto tal cual; si no, se convierte
+/// amountUSD con la cotización vigente.
+model PresencialPrice {
+  id        String   @id @default(cuid())
+  name      String
+  amountUSD Decimal? @db.Decimal(10, 2)
+  amountARS Decimal? @db.Decimal(10, 2)
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+
+  classes PresencialClass[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("presencial_prices")
 }
 
 /// Clase presencial. startAt/endAt se calculan de la fecha + horas (09–18, hora
@@ -557,6 +585,10 @@ model PresencialClass {
   // formaciones de la clase. Por defecto la inscripción es libre.
   restrictToStudents Boolean   @default(false)
   confirmedAt        DateTime?
+
+  // Seña que se cobra para reservar un lugar. null = sin seña (no reservable).
+  priceId String?
+  price   PresencialPrice? @relation(fields: [priceId], references: [id], onDelete: SetNull)
 
   categories PresencialClassCategory[]
   signups    PresencialSignup[]
@@ -593,12 +625,27 @@ model PresencialSignup {
   note    String?
   confirmedAt DateTime?
 
+  // --- Seña (Mercado Pago) ---
+  // La alumna tiene que aceptar el disclaimer ANTES de que se arme la
+  // preference: lo que reserva es el derecho a una presencialidad, no la fecha.
+  disclaimerAcceptedAt DateTime?
+  depositStatus        PresencialDepositStatus @default(NONE)
+  // Monto efectivamente cobrado en pesos y, si el precio estaba en dólares, el
+  // valor original y la cotización usada (queda como comprobante histórico).
+  depositAmountARS Decimal? @db.Decimal(10, 2)
+  depositAmountUSD Decimal? @db.Decimal(10, 2)
+  depositRate      Decimal? @db.Decimal(10, 2)
+  mpPreferenceId   String?
+  mpPaymentId      String?
+  depositPaidAt    DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([classId, userId])
   @@index([userId])
   @@index([status])
+  @@index([mpPaymentId])
   @@map("presencial_signups")
 }
 

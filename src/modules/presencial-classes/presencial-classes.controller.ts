@@ -15,10 +15,15 @@ import { Auditory, CurrentUser, Roles } from '../../shared/decorators';
 import type { JwtPayload } from '../../shared/types';
 import { UserRole } from '../../shared/types';
 import { PresencialClassesService } from './presencial-classes.service';
+import { PresencialDepositsService } from './presencial-deposits.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   CreatePresencialClassDto,
+  CreatePresencialPriceDto,
   SignupDto,
+  StartDepositDto,
   UpdatePresencialClassDto,
+  UpdatePresencialPriceDto,
 } from './dto';
 
 @ApiTags('presencial-classes')
@@ -26,7 +31,11 @@ import {
 @Controller('presencial-classes')
 @UseGuards(JwtAuthGuard)
 export class PresencialClassesController {
-  constructor(private readonly service: PresencialClassesService) {}
+  constructor(
+    private readonly service: PresencialClassesService,
+    private readonly deposits: PresencialDepositsService,
+    private readonly settings: SettingsService,
+  ) {}
 
   // --------------------- Alumna ---------------------
 
@@ -39,6 +48,34 @@ export class PresencialClassesController {
   @Get('mine')
   mine(@CurrentUser() user: JwtPayload) {
     return this.service.mine(user.sub);
+  }
+
+  /**
+   * Lo que hay que mostrar ANTES de mandar a pagar: monto de la seña y el
+   * disclaimer que la alumna tiene que aceptar. Sin seña definida devuelve
+   * deposit en null y la fecha no se puede reservar.
+   */
+  @Get(':id/deposit')
+  async depositInfo(@Param('id') id: string) {
+    const [quote, disclaimer] = await Promise.all([
+      this.deposits.quoteForClass(id),
+      this.settings.getPresencialDepositDisclaimer(),
+    ]);
+    return { deposit: quote, disclaimer };
+  }
+
+  /** Crea la preference de MP. Requiere haber aceptado el disclaimer. */
+  @Post(':id/deposit')
+  startDeposit(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: StartDepositDto,
+  ) {
+    return this.deposits.start({
+      userId: user.sub,
+      classId: id,
+      acceptedDisclaimer: dto.acceptedDisclaimer,
+    });
   }
 
   @Post(':id/signup')
@@ -66,6 +103,36 @@ export class PresencialClassesController {
     @Query('status') status?: string,
   ) {
     return this.service.listAdmin({ from, to, status });
+  }
+
+  // --------------------- Listado de precios (admin) ---------------------
+
+  @Get('admin/prices')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
+  listPrices() {
+    return this.deposits.listPrices();
+  }
+
+  @Post('admin/prices')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  createPrice(@Body() dto: CreatePresencialPriceDto) {
+    return this.deposits.createPrice(dto);
+  }
+
+  @Patch('admin/prices/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  updatePrice(@Param('id') id: string, @Body() dto: UpdatePresencialPriceDto) {
+    return this.deposits.updatePrice(id, dto);
+  }
+
+  @Delete('admin/prices/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  deletePrice(@Param('id') id: string) {
+    return this.deposits.deletePrice(id);
   }
 
   @Post('admin')

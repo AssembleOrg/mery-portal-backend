@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -50,6 +51,14 @@ export class CreatePresencialClassDto {
   @IsOptional()
   @IsBoolean()
   restrictToStudents?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description: 'Seña del listado de precios. Sin seña la fecha no se puede reservar.',
+  })
+  @IsOptional()
+  @IsString()
+  priceId?: string | null;
 }
 
 export class UpdatePresencialClassDto {
@@ -93,6 +102,11 @@ export class UpdatePresencialClassDto {
   @IsOptional()
   @IsBoolean()
   restrictToStudents?: boolean;
+
+  @ApiProperty({ required: false, description: 'null para sacarle la seña' })
+  @IsOptional()
+  @IsString()
+  priceId?: string | null;
 }
 
 export class SignupDto {
@@ -100,4 +114,70 @@ export class SignupDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+export class StartDepositDto {
+  @ApiProperty({
+    description:
+      'La alumna leyó y aceptó que reserva el derecho a una presencialidad, no una fecha fija.',
+  })
+  @IsBoolean()
+  acceptedDisclaimer: boolean;
+}
+
+export class CreatePresencialPriceDto {
+  @ApiProperty({ description: 'Nombre visible (ej. "Nanoblading")' })
+  @IsString()
+  name: string;
+
+  @ApiProperty({ required: false, description: 'Seña en dólares (se convierte a pesos al cobrar)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountUSD?: number | null;
+
+  @ApiProperty({ required: false, description: 'Seña en pesos. Si viene, manda sobre el monto en USD.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountARS?: number | null;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ required: false, default: 0 })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+}
+
+export class UpdatePresencialPriceDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountUSD?: number | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountARS?: number | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
 }
