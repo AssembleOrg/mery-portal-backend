@@ -1,0 +1,4 @@
+export * from './video-notes.module';
+export * from './video-notes.service';
+export * from './video-notes.controller';
+export * from './dto';

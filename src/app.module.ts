@@ -27,6 +27,7 @@ import { MentorshipModule } from './modules/mentorship/mentorship.module';
 import { PresencialClassesModule } from './modules/presencial-classes';
 import { NotificationsModule } from './modules/notifications';
 import { PublicCatalogModule } from './modules/public-catalog';
+import { VideoNotesModule } from './modules/video-notes';
 import { PrismaService } from './shared/services';
 import { GlobalExceptionFilter } from './common/filters';
 import { ResponseInterceptor, LoggingInterceptor } from './shared/interceptors';
@@ -79,6 +80,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     PresencialClassesModule,
     NotificationsModule,
     PublicCatalogModule,
+    VideoNotesModule,
   ],
   controllers: [AppController],
   providers: [

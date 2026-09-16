@@ -54,6 +54,7 @@ model User {
   presencialSignups PresencialSignup[]
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
+  videoNotes        VideoNote[]
 
   // Audit fields
   createdAt DateTime  @default(now())
@@ -125,6 +126,7 @@ model VideoCategory {
   mentorships        Mentorship[]
   mentorshipProducts MentorshipProduct[]
   presencialClasses  PresencialClassCategory[]
+  videoNotes         VideoNote[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -163,6 +165,7 @@ model Video {
 
   // Relations
   views VideoView[]
+  notes VideoNote[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -907,4 +910,27 @@ model FormResponse {
   @@index([formId, createdAt])
   @@index([formId, status])
   @@map("form_responses")
+}
+
+/// Anotación de una alumna sobre un segundo puntual de un video (diario de la formación).
+model VideoNote {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId     String
+  video       Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  /// Redundante con video.categoryId: permite listar el diario de toda la formación en una consulta.
+  categoryId  String
+  category    VideoCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  /// Segundo del video al que refiere la nota.
+  timeSeconds Int
+  content     String        @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, categoryId])
+  @@index([userId, videoId, timeSeconds])
+  @@index([videoId])
+  @@map("video_notes")
 }
