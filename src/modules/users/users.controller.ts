@@ -20,8 +20,9 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, RenewCourseDto, MigrateUserDto } from './dto';
 import { JwtAuthGuard, RolesGuard } from '../../shared/guards';
-import { Roles, Auditory } from '../../shared/decorators';
+import { Roles, Auditory, CurrentUser } from '../../shared/decorators';
 import { UserRole } from '../../shared/types';
+import type { JwtPayload } from '../../shared/types';
 
 @ApiTags('Usuarios')
 @Controller('users')
@@ -44,8 +45,11 @@ export class UsersController {
     status: 409,
     description: 'El usuario ya existe',
   })
-  async create(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
-    return this.usersService.create(createUserDto);
+  async create(
+    @Body() createUserDto: CreateUserDto,
+    @CurrentUser() actor: JwtPayload,
+  ): Promise<UserResponseDto> {
+    return this.usersService.create(createUserDto, actor);
   }
 
   @Get()
@@ -91,8 +95,9 @@ export class UsersController {
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @CurrentUser() actor: JwtPayload,
   ): Promise<UserResponseDto> {
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(id, updateUserDto, actor);
   }
 
   @Delete(':id')
@@ -108,8 +113,11 @@ export class UsersController {
     status: 404,
     description: 'Usuario no encontrado',
   })
-  async remove(@Param('id') id: string): Promise<void> {
-    return this.usersService.remove(id);
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() actor: JwtPayload,
+  ): Promise<void> {
+    return this.usersService.remove(id, actor);
   }
 
   @Patch(':id/restore')
@@ -125,8 +133,11 @@ export class UsersController {
     status: 404,
     description: 'Usuario no encontrado o no está eliminado',
   })
-  async restore(@Param('id') id: string): Promise<UserResponseDto> {
-    return this.usersService.restore(id);
+  async restore(
+    @Param('id') id: string,
+    @CurrentUser() actor: JwtPayload,
+  ): Promise<UserResponseDto> {
+    return this.usersService.restore(id, actor);
   }
 
   /**

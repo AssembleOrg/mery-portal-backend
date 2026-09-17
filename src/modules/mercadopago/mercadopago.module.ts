@@ -7,6 +7,7 @@ import { CartModule } from '../cart/cart.module';
 import { ChatModule } from '../chat/chat.module';
 import { RewardsModule } from '../rewards/rewards.module';
 import { PresencialClassesModule } from '../presencial-classes/presencial-classes.module';
+import { CouponsModule } from '../coupons/coupons.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PresencialClassesModule } from '../presencial-classes/presencial-classe
     ChatModule,
     RewardsModule,
     PresencialClassesModule,
+    CouponsModule,
   ],
   controllers: [MercadoPagoController, WebhookAliasController],
   providers: [MercadoPagoService, PrismaService],

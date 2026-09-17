@@ -282,29 +282,43 @@ export class CouponsService {
     return { consumptionExpiresAt: expiresAt.toISOString() };
   }
 
-  async release(id: string) {
+  /**
+   * Libera la reserva pendiente más reciente del usuario para este cupón.
+   * Antes decrementaba `currentUses` sin mirar de quién era ni si el uso ya
+   * estaba confirmado, así que cualquiera podía volver a cero un cupón de un
+   * solo uso y reutilizarlo en cada compra.
+   */
+  async release(id: string, userId: string) {
     const coupon = await this.prisma.coupon.findFirst({
       where: { id, deletedAt: null },
     });
     if (!coupon) throw new NotFoundException('Cupón no encontrado');
 
-    if (coupon.currentUses > 0) {
-      await this.prisma.coupon.update({
-        where: { id },
+    await this.prisma.$transaction(async (tx) => {
+      const pending = await tx.couponConsumption.findFirst({
+        where: { couponId: id, userId, status: 'pending' },
+        orderBy: { consumedAt: 'desc' },
+      });
+      if (!pending) return;
+
+      const expired = await tx.couponConsumption.updateMany({
+        where: { id: pending.id, status: 'pending' },
+        data: { status: 'expired' },
+      });
+      if (expired.count === 0) return;
+
+      await tx.coupon.updateMany({
+        where: { id, currentUses: { gt: 0 } },
         data: { currentUses: { decrement: 1 } },
       });
-    }
-
-    // Also expire any pending consumption for this coupon
-    await this.prisma.couponConsumption.updateMany({
-      where: { couponId: id, status: 'pending' },
-      data: { status: 'expired' },
     });
   }
 
   /**
    * If preferenceId is provided: reserve coupon usage (pending with expiration).
    * If preferenceId is not provided: confirm latest pending usage for user+coupon.
+   * El endpoint HTTP solo expone la reserva (con usuario del JWT); la
+   * confirmación la usa el webhook de pago vía `confirmPaidUsage`.
    */
   async confirmConsumption(couponId: string, userId: string, preferenceId?: string) {
     const now = new Date();
@@ -323,6 +337,9 @@ export class CouponsService {
         });
         if (!coupon) {
           throw new NotFoundException('Cupón no encontrado');
+        }
+        if (coupon.maxUses != null && coupon.currentUses >= coupon.maxUses) {
+          throw new ForbiddenException('El cupón ha alcanzado su límite de usos');
         }
         // Cupón personal: solo puede reservarlo su dueño.
         if (coupon.userId && coupon.userId !== userId) {
@@ -364,6 +381,45 @@ export class CouponsService {
       await tx.couponConsumption.update({
         where: { id: pending.id },
         data: { status: 'confirmed', confirmedAt: now },
+      });
+    });
+  }
+
+  /**
+   * Marca como usado el cupón de un pago aprobado (llamado desde el webhook de
+   * Mercado Pago). Confirma la reserva pendiente si todavía existe; si ya había
+   * expirado (webhook tardío), registra el uso igual para que cuente en el tope.
+   */
+  async confirmPaidUsage(couponId: string, userId: string) {
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const coupon = await tx.coupon.findFirst({ where: { id: couponId } });
+      if (!coupon) return;
+
+      const pending = await tx.couponConsumption.findFirst({
+        where: { couponId, userId, status: 'pending' },
+        orderBy: { consumedAt: 'desc' },
+      });
+      if (pending) {
+        await tx.couponConsumption.update({
+          where: { id: pending.id },
+          data: { status: 'confirmed', confirmedAt: now },
+        });
+        return;
+      }
+
+      await tx.coupon.update({
+        where: { id: couponId },
+        data: { currentUses: { increment: 1 } },
+      });
+      await tx.couponConsumption.create({
+        data: {
+          couponId,
+          userId,
+          status: 'confirmed',
+          expiresAt: now,
+          confirmedAt: now,
+        },
       });
     });
   }

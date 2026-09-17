@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../shared/services';
 import { PasswordUtil, normalizeEmail } from '../../shared/utils';
-import { PaginatedResponse } from '../../shared/types';
+import { PaginatedResponse, UserRole } from '../../shared/types';
+import type { JwtPayload } from '../../shared/types';
 import { CreateUserDto, UpdateUserDto, UserResponseDto, UserQueryDto, AssignCourseDto, RenewCourseDto, MigrateUserDto } from './dto';
 import { plainToClass } from 'class-transformer';
 import { EmailService } from '../email/email.service';
@@ -13,8 +14,37 @@ export class UsersService {
     private emailService: EmailService,
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
+
+  // ─── Reglas de gestión entre roles ────────────────────────────────
+  // Solo un ADMIN puede crear, editar, borrar o restaurar cuentas de staff
+  // (ADMIN/SUBADMIN) y asignar roles distintos de USER. Nadie cambia su propio
+  // rol ni se desactiva a sí mismo. Sin estas reglas un SUBADMIN podía
+  // ascenderse a ADMIN o tomar la cuenta de un ADMIN cambiándole la contraseña.
+
+  private isStaffRole(role: string | null | undefined) {
+    return role === UserRole.ADMIN || role === UserRole.SUBADMIN;
+  }
+
+  private assertCanAssignRole(actor: JwtPayload | undefined, role: UserRole | undefined) {
+    if (!actor || role === undefined) return;
+    if (actor.role !== UserRole.ADMIN && role !== UserRole.USER) {
+      throw new ForbiddenException('Solo un administrador puede asignar roles de staff');
+    }
+  }
+
+  private assertCanManageTarget(
+    actor: JwtPayload | undefined,
+    target: { id: string; role: string },
+  ) {
+    if (!actor || actor.role === UserRole.ADMIN) return;
+    if (actor.sub !== target.id && this.isStaffRole(target.role)) {
+      throw new ForbiddenException('Solo un administrador puede gestionar cuentas de staff');
+    }
+  }
+
+  async create(createUserDto: CreateUserDto, actor?: JwtPayload): Promise<UserResponseDto> {
     const { email: rawEmail, password, ...userData } = createUserDto;
+    this.assertCanAssignRole(actor, userData.role);
     const email = normalizeEmail(rawEmail);
 
     // Check if user already exists
@@ -121,7 +151,7 @@ export class UsersService {
     return plainToClass(UserResponseDto, user);
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+  async update(id: string, updateUserDto: UpdateUserDto, actor?: JwtPayload): Promise<UserResponseDto> {
     const { password, ...updateData } = updateUserDto;
 
     // Check if user exists and is not deleted
@@ -131,6 +161,19 @@ export class UsersService {
 
     if (!existingUser) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    this.assertCanManageTarget(actor, existingUser);
+    if (actor && actor.sub === id) {
+      if (updateData.role !== undefined && updateData.role !== existingUser.role) {
+        throw new ForbiddenException('No podés cambiar tu propio rol');
+      }
+      if (updateData.isActive === false) {
+        throw new ForbiddenException('No podés desactivar tu propia cuenta');
+      }
+    }
+    if (updateData.role !== undefined && updateData.role !== existingUser.role) {
+      this.assertCanAssignRole(actor, updateData.role);
     }
 
     // Hash password if provided
@@ -161,7 +204,7 @@ export class UsersService {
     return plainToClass(UserResponseDto, user);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor?: JwtPayload): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
@@ -170,6 +213,11 @@ export class UsersService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    if (actor && actor.sub === id) {
+      throw new ForbiddenException('No podés eliminar tu propia cuenta');
+    }
+    this.assertCanManageTarget(actor, user);
+
     // Soft delete
     await this.prisma.user.update({
       where: { id },
@@ -177,7 +225,7 @@ export class UsersService {
     });
   }
 
-  async restore(id: string): Promise<UserResponseDto> {
+  async restore(id: string, actor?: JwtPayload): Promise<UserResponseDto> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: { not: null } },
     });
@@ -185,6 +233,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuario no encontrado o no está eliminado');
     }
+
+    this.assertCanManageTarget(actor, user);
 
     const restoredUser = await this.prisma.user.update({
       where: { id },

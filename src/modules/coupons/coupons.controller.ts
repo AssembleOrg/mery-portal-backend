@@ -11,9 +11,9 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UserRole } from '~/shared/types';
 import { CouponsService } from './coupons.service';
-import { CreateCouponDto, UpdateCouponDto, ValidateCouponDto } from './dto';
+import { ConfirmConsumptionDto, CreateCouponDto, UpdateCouponDto, ValidateCouponDto } from './dto';
 import { JwtAuthGuard, RolesGuard } from '~/shared/guards';
-import { Roles, CurrentUser, Public } from '~/shared/decorators';
+import { Roles, CurrentUser } from '~/shared/decorators';
 import type { JwtPayload } from '~/shared/types';
 
 @ApiTags('coupons')
@@ -69,20 +69,23 @@ export class CouponsController {
     return this.couponsService.consume(id, user.sub);
   }
 
+  // Libera solo una reserva pendiente del propio usuario (no toca usos confirmados).
   @Post(':id/release')
-  async release(@Param('id') id: string) {
-    return this.couponsService.release(id);
+  async release(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.couponsService.release(id, user.sub);
   }
 
+  // Reserva un uso para la preference recién creada. La confirmación del uso
+  // la hace el webhook de Mercado Pago en el backend al aprobarse el pago.
   @Post('confirm-consumption')
-  @Public()
   async confirmConsumption(
-    @Body() body: { couponId: string; userId: string; preferenceId?: string },
+    @Body() dto: ConfirmConsumptionDto,
+    @CurrentUser() user: JwtPayload,
   ) {
     return this.couponsService.confirmConsumption(
-      body.couponId,
-      body.userId,
-      body.preferenceId,
+      dto.couponId,
+      user.sub,
+      dto.preferenceId,
     );
   }
 }

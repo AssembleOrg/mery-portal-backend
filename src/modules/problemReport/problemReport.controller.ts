@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Public } from '~/shared/decorators';
-import { JwtAuthGuard } from '~/shared/guards';
+import { Public, Roles } from '~/shared/decorators';
+import { JwtAuthGuard, RolesGuard } from '~/shared/guards';
+import { UserRole } from '~/shared/types';
 import { CreateProblemReportDto } from './dto';
 import { ProblemReportService } from './problemReport.service';
 
@@ -18,8 +19,10 @@ export class ProblemReportController {
     return this.problemReportService.create(createProblemReportDto);
   }
 
+  // Devuelve email, teléfono y descripción de quienes reportaron: solo staff.
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUBADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener todos los reportes de problemas' })
   @ApiResponse({

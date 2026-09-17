@@ -8,6 +8,10 @@ import { CartService } from '../cart/cart.service';
 import { ChatService } from '../chat/chat.service';
 import { RewardsService } from '../rewards/rewards.service';
 import { PresencialDepositsService } from '../presencial-classes/presencial-deposits.service';
+import { CouponsService } from '../coupons/coupons.service';
+
+/** Precio centinela de los cursos que solo se venden en USD (no pasan por MP). */
+const USD_ONLY_SENTINEL = 99999999;
 
 @Injectable()
 export class MercadoPagoService {
@@ -26,6 +30,7 @@ export class MercadoPagoService {
     private chatService: ChatService,
     private rewardsService: RewardsService,
     private presencialDeposits: PresencialDepositsService,
+    private couponsService: CouponsService,
   ) {
     this.accessToken = this.configService.get<string>('MP_ACCESS_TOKEN') || '';
     this.webhookSecret = this.configService.get<string>('MP_WEBHOOK_SECRET') || '';
@@ -236,18 +241,41 @@ export class MercadoPagoService {
         return;
       }
 
-      // Verify all categories exist
-      const categories = await this.prisma.videoCategory.findMany({
-        where: {
-          id: { in: categoryIds },
-          deletedAt: null,
-        },
-      });
+      // Solo se otorga lo que efectivamente se cobró. Los ítems del pago los
+      // arma el servidor desde el quote (precios de la DB), así que son la
+      // fuente confiable; la metadata sola no alcanza. Además se descartan
+      // cursos inactivos o solo-USD, que nunca se cobran por Mercado Pago.
+      const chargedIds = new Set<string>(
+        (Array.isArray(payment.additional_info?.items) ? payment.additional_info.items : [])
+          .map((it: { id?: unknown }) => (it?.id != null ? String(it.id) : ''))
+          .filter(Boolean),
+      );
+      const grantableIds =
+        chargedIds.size > 0
+          ? categoryIds.filter((id) => chargedIds.has(String(id)))
+          : categoryIds;
+      if (chargedIds.size === 0) {
+        this.logger.warn(`⚠️ Pago ${payment.id} sin additional_info.items: se valida solo por estado y precio`);
+      }
+      const notCharged = categoryIds.filter((id) => !grantableIds.includes(id));
+      if (notCharged.length > 0) {
+        this.logger.warn(`🚫 Pago ${payment.id}: categorías en metadata que no se cobraron, se ignoran: ${notCharged.join(', ')}`);
+      }
 
-      if (categories.length !== categoryIds.length) {
+      const categories = (
+        await this.prisma.videoCategory.findMany({
+          where: {
+            id: { in: grantableIds },
+            deletedAt: null,
+            isActive: true,
+          },
+        })
+      ).filter((c) => Number(c.priceARS) !== USD_ONLY_SENTINEL);
+
+      if (categories.length !== grantableIds.length) {
         const foundIds = categories.map(c => c.id);
-        const missingIds = categoryIds.filter(id => !foundIds.includes(id));
-        this.logger.warn(`⚠️ Algunas categorías no encontradas: ${missingIds.join(', ')}`);
+        const missingIds = grantableIds.filter(id => !foundIds.includes(id));
+        this.logger.warn(`⚠️ Categorías no otorgables (inexistentes, inactivas o solo USD): ${missingIds.join(', ')}`);
       }
 
       if (categories.length === 0) {
@@ -335,6 +363,17 @@ export class MercadoPagoService {
         }
       } catch (chatError) {
         this.logger.warn(`⚠️ Error reabriendo chats: ${chatError.message}`);
+      }
+
+      // El uso del cupón se confirma acá, con el pago ya aprobado. Antes lo
+      // hacía un endpoint público que cualquiera podía llamar.
+      const paidCouponId = payment.metadata?.coupon_id;
+      if (paidCouponId && createdCategoryNames.length > 0) {
+        try {
+          await this.couponsService.confirmPaidUsage(String(paidCouponId), userId);
+        } catch (couponError) {
+          this.logger.warn(`⚠️ Error confirmando uso de cupón: ${couponError.message}`);
+        }
       }
 
       // Recompensa por compra: cupón-regalo personal 20% + email de gracias.
