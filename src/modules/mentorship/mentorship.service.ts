@@ -599,7 +599,12 @@ export class MentorshipService {
       process.env.GOOGLE_MENTOR_EMAIL || 'cursos@merygarcia.com.ar';
     const res = await this.calendar.createEvent({
       summary: `Mentoría — ${category?.name ?? 'Curso'}`,
-      description: 'Mentoría de Mery Garcia.',
+      // La invitación sale al reservar y la alumna la recibe por email: se
+      // aclara que el horario todavía no está confirmado por Mery.
+      description:
+        'Mentoría de Mery García.\n\n' +
+        'La mentoría queda sujeta a confirmación de Mery García. ' +
+        'Si hubiera que cambiar el horario, te avisamos.',
       start: slot.start,
       end: slot.end,
       attendeeEmails: [mentorEmail, meetingEmail.trim().toLowerCase()],
