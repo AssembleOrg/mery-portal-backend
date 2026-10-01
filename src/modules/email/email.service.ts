@@ -1371,6 +1371,9 @@ export class EmailService {
                 <tr>
                   <td style="padding:44px 56px 0; text-align:center;">
                     <p style="margin:0; color:#f9bbc4; font-size:15px; font-weight:700; line-height:1.6;">Para más detalles, podés contactarte con una asesora académica ❤️</p>
+                    <div style="margin-top:12px;">
+                      <a href="https://wa.me/5491122579076" target="_blank" style="color:#f9bbc4; font-size:15px; text-decoration:none; border-bottom:1px solid rgba(249,187,196,0.5); padding-bottom:2px;">WhatsApp: 11 2257-9076</a>
+                    </div>
                   </td>
                 </tr>
 
