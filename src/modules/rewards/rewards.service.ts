@@ -9,6 +9,14 @@ const REWARD_DISCOUNT_PERCENT = 20;
 /** Duración del cupón-regalo (6 meses). */
 const REWARD_VALIDITY_MONTHS = 6;
 
+/**
+ * Cupón "nueva formación" que se reclama al completar el formulario de la
+ * mentoría. El prefijo identifica el cupón: una cuenta reclama uno solo.
+ */
+const NEW_COURSE_COUPON_PREFIX = 'NUEVA20';
+const NEW_COURSE_DISCOUNT_PERCENT = 20;
+const NEW_COURSE_VALIDITY_MONTHS = 3;
+
 @Injectable()
 export class RewardsService {
   private readonly logger = new Logger(RewardsService.name);
@@ -88,5 +96,53 @@ export class RewardsService {
       `Cupón-regalo ${code} emitido a ${user.email}${emailed ? '' : ' (email falló)'}`,
     );
     return { code };
+  }
+
+  /**
+   * Emite (una sola vez por cuenta) el cupón 20% OFF para una nueva formación,
+   * válido 3 meses, que se reclama desde el formulario de la mentoría.
+   * Personal, un uso, no aplica a lo ya comprado. No es acumulable: el checkout
+   * acepta un solo cupón y no lo combina con la promo global.
+   * Si ya lo había reclamado, devuelve el mismo en vez de crear otro.
+   */
+  async claimNewCourseCoupon(
+    userId: string,
+  ): Promise<{ code: string; validTo: string; alreadyClaimed: boolean }> {
+    const existing = await this.prisma.coupon.findFirst({
+      where: {
+        userId,
+        code: { startsWith: `${NEW_COURSE_COUPON_PREFIX}-` },
+        deletedAt: null,
+      },
+      select: { code: true, validTo: true },
+    });
+    if (existing) {
+      return {
+        code: existing.code,
+        validTo: (existing.validTo ?? new Date()).toISOString(),
+        alreadyClaimed: true,
+      };
+    }
+
+    const now = new Date();
+    const validTo = new Date(now);
+    validTo.setMonth(validTo.getMonth() + NEW_COURSE_VALIDITY_MONTHS);
+
+    const code = await this.uniqueCode(NEW_COURSE_COUPON_PREFIX);
+    await this.prisma.coupon.create({
+      data: {
+        code,
+        discountPercent: NEW_COURSE_DISCOUNT_PERCENT,
+        validFrom: now,
+        validTo,
+        maxUses: 1,
+        isActive: true,
+        appliesToAll: true,
+        userId,
+        excludeOwnedCategories: true,
+      },
+    });
+    this.logger.log(`Cupón nueva formación ${code} emitido a ${userId}`);
+    return { code, validTo: validTo.toISOString(), alreadyClaimed: false };
   }
 }
