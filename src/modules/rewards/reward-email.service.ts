@@ -10,6 +10,13 @@ interface ThankYouParams {
   validToLabel: string;
 }
 
+interface NewCourseCouponParams {
+  to: { email: string; name: string };
+  code: string;
+  discountPercent: number;
+  validToLabel: string;
+}
+
 /** Email de agradecimiento por la compra + cupón-regalo personal. */
 @Injectable()
 export class RewardEmailService {
@@ -43,6 +50,51 @@ export class RewardEmailService {
     } catch (err) {
       this.logger.error(
         `No se pudo enviar el email de agradecimiento a ${params.to.email}`,
+        err as Error,
+      );
+      return false;
+    }
+  }
+
+  /** Cupón 20% OFF nueva formación, reclamado desde el formulario de mentoría. */
+  async sendNewCourseCoupon(params: NewCourseCouponParams): Promise<boolean> {
+    const shopUrl = `${this.config.get<string>('FRONTEND_URL', '')}/es`;
+
+    const email = new SibApiV3Sdk.SendSmtpEmail();
+    email.sender = {
+      name: 'Mery Garcia - Cosmetic Tattoo',
+      email: this.config.get<string>('EMAIL_FROM', 'noreply@merygarcia.com'),
+    };
+    email.to = [params.to];
+    email.subject = `Tu cupón ${params.discountPercent}% OFF para tu nueva formación 🎁`;
+    email.htmlContent = `
+      <div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#3a1f26">
+        <h2 style="color:#660e1b">¡Hola${params.to.name ? ` ${params.to.name}` : ''}! 🎁</h2>
+        <p>Gracias por contarnos con qué te gustaría seguir. Acá tenés tu cupón de
+        <strong>${params.discountPercent}% de descuento</strong> para tu <strong>nueva formación</strong>.</p>
+        <div style="background:#f7eaec;border-radius:12px;padding:20px;text-align:center;margin:20px 0">
+          <div style="font-size:12px;color:#8a5b64;text-transform:uppercase;letter-spacing:1px">Tu código personal</div>
+          <div style="font-size:26px;font-weight:800;color:#660e1b;letter-spacing:2px">${params.code}</div>
+        </div>
+        <p style="font-size:14px">Es exclusivo de tu cuenta, de un solo uso, válido hasta
+        <strong>${params.validToLabel}</strong>, y se aplica sobre una formación que todavía no tengas.
+        Lo cargás en el checkout, en el campo de cupón.</p>
+        <p style="font-size:12px;color:#8a5b64">No acumulable con otras promociones.</p>
+        <p style="text-align:center;margin:28px 0">
+          <a href="${shopUrl}" style="background:#660e1b;color:#fff;text-decoration:none;padding:12px 24px;border-radius:999px;font-weight:700">
+            Ver formaciones
+          </a>
+        </p>
+        <p style="font-size:12px;color:#8a5b64">Si el botón no funciona, entrá a ${shopUrl}</p>
+      </div>
+    `;
+
+    try {
+      await this.api.sendTransacEmail(email);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo enviar el cupón nueva formación a ${params.to.email}`,
         err as Error,
       );
       return false;

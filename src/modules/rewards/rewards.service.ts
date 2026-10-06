@@ -142,7 +142,29 @@ export class RewardsService {
         excludeOwnedCategories: true,
       },
     });
-    this.logger.log(`Cupón nueva formación ${code} emitido a ${userId}`);
+    // El mail solo sale la primera vez: un reclamo repetido devuelve el mismo
+    // código en pantalla sin volver a mandarlo.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true },
+    });
+    const emailed = user
+      ? await this.email.sendNewCourseCoupon({
+          to: { email: user.email, name: user.firstName ?? '' },
+          code,
+          discountPercent: NEW_COURSE_DISCOUNT_PERCENT,
+          validToLabel: validTo.toLocaleDateString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            timeZone: 'America/Argentina/Buenos_Aires',
+          }),
+        })
+      : false;
+
+    this.logger.log(
+      `Cupón nueva formación ${code} emitido a ${userId}${emailed ? '' : ' (email falló)'}`,
+    );
     return { code, validTo: validTo.toISOString(), alreadyClaimed: false };
   }
 }
