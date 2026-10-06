@@ -144,27 +144,37 @@ export class RewardsService {
     });
     // El mail solo sale la primera vez: un reclamo repetido devuelve el mismo
     // código en pantalla sin volver a mandarlo.
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true, firstName: true },
-    });
-    const emailed = user
-      ? await this.email.sendNewCourseCoupon({
-          to: { email: user.email, name: user.firstName ?? '' },
-          code,
-          discountPercent: NEW_COURSE_DISCOUNT_PERCENT,
-          validToLabel: validTo.toLocaleDateString('es-AR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            timeZone: 'America/Argentina/Buenos_Aires',
-          }),
-        })
-      : false;
+    // Sale en segundo plano: esperarlo demoraba la respuesta y el front seguía
+    // a la agenda sin mostrar el código.
+    void this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, firstName: true },
+      })
+      .then((user) =>
+        user
+          ? this.email.sendNewCourseCoupon({
+              to: { email: user.email, name: user.firstName ?? '' },
+              code,
+              discountPercent: NEW_COURSE_DISCOUNT_PERCENT,
+              validToLabel: validTo.toLocaleDateString('es-AR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                timeZone: 'America/Argentina/Buenos_Aires',
+              }),
+            })
+          : false,
+      )
+      .then((emailed) =>
+        this.logger.log(
+          `Cupón nueva formación ${code} emitido a ${userId}${emailed ? '' : ' (email falló)'}`,
+        ),
+      )
+      .catch((err) =>
+        this.logger.error(`Mail del cupón ${code} a ${userId} falló`, err as Error),
+      );
 
-    this.logger.log(
-      `Cupón nueva formación ${code} emitido a ${userId}${emailed ? '' : ' (email falló)'}`,
-    );
     return { code, validTo: validTo.toISOString(), alreadyClaimed: false };
   }
 }
