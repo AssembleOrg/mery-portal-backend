@@ -432,6 +432,9 @@ model Mentorship {
   // apunta al MentorshipCredit consumido.
   creditId String?
 
+  /// Material previo (solo Estilismo): { box, sheet, dislike, like: {url,key}[], notStaff, updatedAt }
+  material Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

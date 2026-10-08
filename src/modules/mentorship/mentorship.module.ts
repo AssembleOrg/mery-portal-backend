@@ -7,9 +7,10 @@ import { MentorshipEmailService } from './mentorship-email.service';
 import { PrismaService } from '../../shared/services';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-  imports: [ConfigModule, ChatModule, NotificationsModule],
+  imports: [ConfigModule, ChatModule, NotificationsModule, StorageModule],
   controllers: [MentorshipController],
   providers: [
     MentorshipService,

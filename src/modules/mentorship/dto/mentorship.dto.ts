@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { MentorshipProductType } from '@prisma/client';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEmail,
@@ -243,4 +244,26 @@ export class UpdateAvailabilityDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+/** Material previo: keys de las imágenes ya subidas, por grupo. */
+export class SaveMaterialDto {
+  @IsArray()
+  @IsString({ each: true })
+  box: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  sheet: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  dislike: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  like: string[];
+
+  @IsBoolean()
+  notStaff: boolean;
 }

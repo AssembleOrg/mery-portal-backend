@@ -3,13 +3,19 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
+  ParseFilePipeBuilder,
   Patch,
   Post,
+  Put,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard, RolesGuard } from '../../shared/guards';
 import { CurrentUser, Roles } from '../../shared/decorators';
 import type { JwtPayload } from '../../shared/types';
@@ -22,6 +28,7 @@ import {
   CreateVariantDto,
   GrantCreditDto,
   RescheduleMentorshipDto,
+  SaveMaterialDto,
   UpdateAvailabilityDto,
   UpdateProductDto,
   UpdateVariantDto,
@@ -71,6 +78,32 @@ export class MentorshipController {
   @Post(':id/cancel')
   cancel(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.mentorship.cancel(user.sub, id);
+  }
+
+  // Material previo: subir una imagen (devuelve {url,key}) y guardar la selección.
+  @Post(':id/material/images')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  uploadMaterialImage(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addMaxSizeValidator({ maxSize: 10 * 1024 * 1024 })
+        .build({ errorHttpStatusCode: HttpStatus.BAD_REQUEST }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.mentorship.uploadMaterialImage(user.sub, id, file);
+  }
+
+  @Put(':id/material')
+  saveMaterial(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: SaveMaterialDto,
+  ) {
+    return this.mentorship.saveMaterial(user.sub, id, dto);
   }
 
   // Catálogo público de productos pagos (mentorías / one-to-one) con variantes.

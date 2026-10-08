@@ -12,8 +12,10 @@ import { GoogleCalendarService } from './google-calendar.service';
 import { MentorshipEmailService } from './mentorship-email.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StorageService } from '../storage/storage.service';
 import {
   BookMentorshipDto,
+  SaveMaterialDto,
   CreateAvailabilityDto,
   CreateProductDto,
   CreateVariantDto,
@@ -33,6 +35,42 @@ const CHANGE_MIN_HOURS = 72;
 const HORIZON_DAYS = 8 * 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// ponytail: formato de material fijo para Estilismo; pasar a config por curso si otra formación lo pide.
+/** Cursos cuya mentoría pide material previo (mismos slugs que ESTILISMO_QUIZ). */
+const MATERIAL_SLUGS = new Set(['estilismo-de-cejas', 'auto-styling-estilismo-de-cejas']);
+/** Mínimo (para estar completo) y máximo de imágenes por grupo. */
+const MATERIAL_LIMITS = {
+  box: { min: 2, max: 6 },
+  sheet: { min: 1, max: 3 },
+  dislike: { min: 3, max: 3 },
+  like: { min: 3, max: 3 },
+} as const;
+type MaterialGroup = keyof typeof MATERIAL_LIMITS;
+const MATERIAL_GROUPS = Object.keys(MATERIAL_LIMITS) as MaterialGroup[];
+const MATERIAL_MIMES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+
+type MaterialImage = { url: string; key: string };
+export type Material = Record<MaterialGroup, MaterialImage[]> & {
+  notStaff: boolean;
+  updatedAt: string;
+};
+
+/**
+ * Carpeta del material por alumna + curso (no por reserva): si cancela y vuelve
+ * a reservar el mismo curso, las imágenes siguen siendo válidas y se heredan.
+ */
+function materialFolder(m: { userId: string; categoryId: string }): string {
+  return `mentorships/${m.userId}/${m.categoryId}`;
+}
+
+function isMaterialComplete(m: Material | null): boolean {
+  if (!m) return false;
+  return (
+    m.notStaff &&
+    MATERIAL_GROUPS.every((g) => (m[g]?.length ?? 0) >= MATERIAL_LIMITS[g].min)
+  );
+}
+
 export interface Slot {
   start: Date;
   end: Date;
@@ -48,6 +86,7 @@ export class MentorshipService {
     private readonly email: MentorshipEmailService,
     private readonly gateway: ChatGateway,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
 
   /** Aviso a los admins (no bloquea el flujo si falla). */
@@ -278,6 +317,8 @@ export class MentorshipService {
         categoryId,
         status: { in: [MentorshipStatus.SCHEDULED, MentorshipStatus.COMPLETED] },
       },
+      // El slug hace falta para saber si la mentoría pide material previo.
+      include: { category: { select: { slug: true } } },
     });
   }
 
@@ -402,6 +443,14 @@ export class MentorshipService {
 
     const slot = await this.findMatchingSlot(dto.start);
 
+    // Si ya había cargado material en una reserva cancelada de este curso, la
+    // nueva lo hereda: no tiene que volver a subir todo.
+    const previous = await this.prisma.mentorship.findFirst({
+      where: { userId, categoryId, material: { not: Prisma.DbNull } },
+      orderBy: { createdAt: 'desc' },
+      select: { material: true },
+    });
+
     try {
       const mentorship = await this.prisma.mentorship.create({
         data: {
@@ -412,6 +461,9 @@ export class MentorshipService {
           status: MentorshipStatus.SCHEDULED,
           meetingEmail: dto.meetingEmail.trim().toLowerCase(),
           creditId,
+          ...(previous?.material
+            ? { material: previous.material as Prisma.InputJsonValue }
+            : {}),
         },
       });
       if (creditId) {
@@ -422,7 +474,20 @@ export class MentorshipService {
       }
       await this.attachCalendarEvent(mentorship.id, slot, dto.meetingEmail, categoryId);
       await this.notifyAdmins(mentorship.id, 'reservó');
-      return this.serialize(await this.byId(mentorship.id));
+      const booked = await this.byId(mentorship.id);
+      if (
+        MATERIAL_SLUGS.has(booked.category.slug) &&
+        !isMaterialComplete(booked.material as Material | null)
+      ) {
+        void this.notifications.notify(userId, {
+          type: 'mentorship_material_pending',
+          title: 'Cargá tu material para la mentoría',
+          body: 'Subí tus prácticas y referencias para que Mery las revise antes del encuentro.',
+          url: '/es/mi-cuenta',
+          data: { mentorshipId: mentorship.id },
+        });
+      }
+      return this.serialize(booked);
     } catch (err) {
       // Si falló la creación tras haber reservado el crédito, lo liberamos.
       if (creditId) {
@@ -642,9 +707,95 @@ export class MentorshipService {
   // ---------------------------------------------------------------------------
 
   private async byId(id: string) {
-    const m = await this.prisma.mentorship.findUnique({ where: { id } });
+    const m = await this.prisma.mentorship.findUnique({
+      where: { id },
+      include: { category: { select: { slug: true } } },
+    });
     if (!m) throw new NotFoundException('Mentoría no encontrada');
     return m;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Material previo (prácticas + referencias que Mery revisa antes)
+  // ---------------------------------------------------------------------------
+
+  /** La alumna puede cargar material: es suya, pide material y no empezó. */
+  private async editableMaterial(userId: string, id: string) {
+    const m = await this.byId(id);
+    if (m.userId !== userId) throw new ForbiddenException('No es tu mentoría');
+    if (!MATERIAL_SLUGS.has(m.category.slug)) {
+      throw new BadRequestException('Esta mentoría no pide material previo');
+    }
+    if (m.status !== MentorshipStatus.SCHEDULED || m.scheduledStart <= new Date()) {
+      throw new BadRequestException('Ya no se puede modificar el material');
+    }
+    return m;
+  }
+
+  async uploadMaterialImage(
+    userId: string,
+    id: string,
+    file: { buffer: Buffer; mimetype: string; originalname: string } | undefined,
+  ) {
+    const m = await this.editableMaterial(userId, id);
+    if (!file?.buffer) throw new BadRequestException('Archivo inválido');
+    if (!MATERIAL_MIMES.includes(file.mimetype)) {
+      throw new BadRequestException('Formato no permitido (solo PNG/JPG/WEBP)');
+    }
+    // ponytail: si la alumna sube y nunca guarda, el archivo queda huérfano en el bucket.
+    return this.storage.uploadBuffer({
+      buffer: file.buffer,
+      contentType: file.mimetype,
+      originalName: file.originalname,
+      folder: materialFolder(m),
+    });
+  }
+
+  async saveMaterial(userId: string, id: string, dto: SaveMaterialDto) {
+    const m = await this.editableMaterial(userId, id);
+    const prefix = `${materialFolder(m)}/`;
+    for (const g of MATERIAL_GROUPS) {
+      const keys = dto[g];
+      if (keys.length > MATERIAL_LIMITS[g].max) {
+        throw new BadRequestException(`Demasiadas imágenes en "${g}"`);
+      }
+      // Solo keys subidas para esta mentoría: no se pueden colar URLs ajenas.
+      if (keys.some((k) => !k.startsWith(prefix) || k.includes('..'))) {
+        throw new BadRequestException('Imagen inválida');
+      }
+    }
+    if ((dto.dislike.length || dto.like.length) && !dto.notStaff) {
+      throw new BadRequestException(
+        'Confirmá que las referencias no son trabajos del staff de Mery García',
+      );
+    }
+
+    const toImages = (keys: string[]) =>
+      keys.map((key) => ({ key, url: this.storage.publicUrl(key) }));
+    const material: Material = {
+      box: toImages(dto.box),
+      sheet: toImages(dto.sheet),
+      dislike: toImages(dto.dislike),
+      like: toImages(dto.like),
+      notStaff: dto.notStaff,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const before = (m.material as Material | null) ?? null;
+    const updated = await this.prisma.mentorship.update({
+      where: { id },
+      data: { material: material as unknown as Prisma.InputJsonValue },
+      include: { category: { select: { slug: true } } },
+    });
+
+    // Borra del bucket las imágenes que la alumna quitó.
+    const kept = new Set(MATERIAL_GROUPS.flatMap((g) => material[g].map((i) => i.key)));
+    const removed = before
+      ? MATERIAL_GROUPS.flatMap((g) => before[g] ?? []).filter((i) => !kept.has(i.key))
+      : [];
+    await Promise.all(removed.map((i) => this.storage.deleteKey(i.key)));
+
+    return this.serialize(updated);
   }
 
   listMine(userId: string) {
@@ -674,7 +825,7 @@ export class MentorshipService {
       where,
       orderBy: { scheduledStart: 'asc' },
       include: {
-        category: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, slug: true } },
         user: {
           select: { id: true, firstName: true, lastName: true, email: true },
         },
@@ -908,8 +1059,14 @@ export class MentorshipService {
     meetingEmail: string;
     googleMeetLink: string | null;
     userId?: string;
+    material?: Prisma.JsonValue;
+    category?: { slug: string };
   }) {
+    const material = (m.material as Material | null | undefined) ?? null;
     return {
+      materialRequired: !!m.category && MATERIAL_SLUGS.has(m.category.slug),
+      material,
+      materialComplete: isMaterialComplete(material),
       id: m.id,
       categoryId: m.categoryId,
       scheduledStart: m.scheduledStart.toISOString(),
