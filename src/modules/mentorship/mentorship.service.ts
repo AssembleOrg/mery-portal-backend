@@ -89,10 +89,14 @@ export class MentorshipService {
     private readonly storage: StorageService,
   ) {}
 
-  /** Aviso a los admins (no bloquea el flujo si falla). */
+  /**
+   * Aviso a la alumna y a los admins (no bloquea el flujo si falla).
+   * `studentOnly`: el cambio lo hizo un admin, solo se le avisa a la alumna.
+   */
   private async notifyAdmins(
     mentorshipId: string,
     action: 'reservó' | 'reprogramó' | 'canceló',
+    studentOnly = false,
   ) {
     try {
       const m = await this.prisma.mentorship.findUnique({
@@ -106,14 +110,18 @@ export class MentorshipService {
       const studentName =
         [m.user.firstName, m.user.lastName].filter(Boolean).join(' ').trim() ||
         m.user.email;
-      await this.email.notifyAdmins({
+      const emailParams = {
         studentName,
         studentEmail: m.user.email,
+        meetingEmail: m.meetingEmail,
         courseName: m.category.name,
         start: m.scheduledStart,
         meetLink: m.googleMeetLink,
         action,
-      });
+      };
+      await this.email.notifyStudent(emailParams);
+      if (studentOnly) return;
+      await this.email.notifyAdmins(emailParams);
       // Notificación in-app (WebSocket) a los admins conectados.
       const typeByAction = {
         reservó: 'booked',
@@ -592,6 +600,7 @@ export class MentorshipService {
     if (m.googleEventId) {
       await this.calendar.deleteEvent(m.googleEventId);
     }
+    await this.notifyAdmins(mentorshipId, 'canceló', true);
     return { cancelled: true };
   }
 
@@ -632,6 +641,7 @@ export class MentorshipService {
       throw err;
     }
     await this.updateCalendarEvent(mentorshipId, slot);
+    await this.notifyAdmins(mentorshipId, 'reprogramó', true);
     return this.serialize(await this.byId(mentorshipId));
   }
 

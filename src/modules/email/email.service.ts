@@ -333,7 +333,7 @@ export class EmailService {
     }
   }
 
-  private static readonly LOGO_URL =
+  static readonly LOGO_URL =
     'https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/merygarcia_brow_artist_gris_transparente_centrado_clean.png';
 
   // Imágenes de la campaña, alojadas en el CDN. Se distribuyen a lo largo del mail.
