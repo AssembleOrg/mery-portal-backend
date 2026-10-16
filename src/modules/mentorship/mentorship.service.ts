@@ -36,8 +36,8 @@ const HORIZON_DAYS = 8 * 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ponytail: formato de material fijo para Estilismo; pasar a config por curso si otra formación lo pide.
-/** Cursos cuya mentoría pide material previo (mismos slugs que ESTILISMO_QUIZ). */
-const MATERIAL_SLUGS = new Set(['estilismo-de-cejas', 'auto-styling-estilismo-de-cejas']);
+/** Cursos cuya mentoría pide material previo (Autostyling no: decisión de Mery). */
+const MATERIAL_SLUGS = new Set(['estilismo-de-cejas']);
 /** Mínimo (para estar completo) y máximo de imágenes por grupo. */
 const MATERIAL_LIMITS = {
   box: { min: 2, max: 6 },

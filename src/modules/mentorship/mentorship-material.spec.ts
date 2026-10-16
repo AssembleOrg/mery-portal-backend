@@ -73,6 +73,9 @@ describe('MentorshipService material', () => {
       setup({ category: { slug: 'microblading' } }).svc.saveMaterial('u1', ID, dto()),
     ).rejects.toThrow(BadRequestException);
     await expect(
+      setup({ category: { slug: 'auto-styling-estilismo-de-cejas' } }).svc.saveMaterial('u1', ID, dto()),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
       setup({ scheduledStart: new Date(Date.now() - 1000) }).svc.saveMaterial('u1', ID, dto()),
     ).rejects.toThrow(BadRequestException);
   });
