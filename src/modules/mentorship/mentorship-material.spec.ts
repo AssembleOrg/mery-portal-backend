@@ -26,7 +26,7 @@ function setup(over: Record<string, unknown> = {}) {
     },
   };
   const storage = { publicUrl: (k: string) => `https://cdn/${k}`, deleteKey: jest.fn() };
-  const svc = new MentorshipService(prisma as never, {} as never, {} as never, {} as never, {} as never, storage as never);
+  const svc = new MentorshipService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never, storage as never);
   return { svc, storage };
 }
 

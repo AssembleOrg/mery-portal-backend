@@ -5,7 +5,7 @@ import { PrismaService } from '../../shared/services';
 import { UserRole } from '../../shared/types';
 import { EmailService } from '../email/email.service';
 
-interface BookingEmailParams {
+export interface BookingEmailParams {
   studentName: string;
   studentEmail: string;
   /** Email que la alumna cargó en el formulario de reserva. */
@@ -91,6 +91,40 @@ export class MentorshipEmailService {
     } catch (err) {
       this.logger.error('No se pudo avisar a los admins de la mentoría', err as Error);
     }
+  }
+
+  /**
+   * Aviso aparte a los dueños (MENTORSHIP_ALERT_EMAILS, separados por coma),
+   * con reintentos: no depende de que alguien de administración mire la web.
+   * Devuelve si salió (o null si no hay a quién mandarlo).
+   */
+  async notifyOwners(params: BookingEmailParams): Promise<boolean | null> {
+    const to = this.config
+      .get<string>('MENTORSHIP_ALERT_EMAILS', '')
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean)
+      .map((email) => ({ email }));
+    if (!to.length) return null;
+    const email = new SibApiV3Sdk.SendSmtpEmail();
+    email.sender = this.sender();
+    email.to = to;
+    email.subject = `Mentoría ${params.action}: ${params.studentName} — ${params.courseName}`;
+    email.htmlContent = this.adminHtml(params);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await this.api.sendTransacEmail(email);
+        this.logger.log(`Aviso de mentoría (${params.action}) a los dueños`);
+        return true;
+      } catch (err) {
+        this.logger.error(
+          `Aviso de mentoría a los dueños falló (intento ${attempt})`,
+          err as Error,
+        );
+        if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 5000));
+      }
+    }
+    return false;
   }
 
   /**

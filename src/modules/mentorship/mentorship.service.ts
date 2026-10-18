@@ -10,6 +10,7 @@ import { MentorshipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/services';
 import { GoogleCalendarService } from './google-calendar.service';
 import { MentorshipEmailService } from './mentorship-email.service';
+import { MentorshipWhatsappAlertService } from './mentorship-whatsapp-alert.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
@@ -84,6 +85,7 @@ export class MentorshipService {
     private readonly prisma: PrismaService,
     private readonly calendar: GoogleCalendarService,
     private readonly email: MentorshipEmailService,
+    private readonly whatsapp: MentorshipWhatsappAlertService,
     private readonly gateway: ChatGateway,
     private readonly notifications: NotificationsService,
     private readonly storage: StorageService,
@@ -122,6 +124,13 @@ export class MentorshipService {
       await this.email.notifyStudent(emailParams);
       if (studentOnly) return;
       await this.email.notifyAdmins(emailParams);
+      // Al dueño, aparte: mail con reintentos + WhatsApp a su chat. En segundo
+      // plano: los reintentos no demoran la reserva.
+      void this.email
+        .notifyOwners(emailParams)
+        .catch(() => false)
+        .then((mailSent) => this.whatsapp.notify(emailParams, mailSent))
+        .catch((err) => this.logger.error('Aviso al dueño falló', err as Error));
       // Notificación in-app (WebSocket) a los admins conectados.
       const typeByAction = {
         reservó: 'booked',
