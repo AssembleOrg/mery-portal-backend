@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, Max, Min, ValidateNested } from 'class-validator';
+import { CAMPAIGNS } from '../email.service';
+import type { CampaignName } from '../email.service';
 import { CampaignRecipientDto } from './campaign-recipient.dto';
 
 export class SendCampaignDto {
@@ -37,4 +39,13 @@ export class SendCampaignDto {
   @ValidateNested({ each: true })
   @Type(() => CampaignRecipientDto)
   recipients?: CampaignRecipientDto[];
+
+  @ApiPropertyOptional({
+    description: 'Campaña a enviar',
+    enum: CAMPAIGNS,
+    default: 'formaciones',
+  })
+  @IsOptional()
+  @IsIn(CAMPAIGNS)
+  campaign: CampaignName = 'formaciones';
 }

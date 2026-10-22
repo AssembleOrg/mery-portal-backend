@@ -40,6 +40,7 @@ export class EmailController {
       limit: dto.limit,
       confirm: dto.confirm,
       recipients: dto.recipients,
+      campaign: dto.campaign,
       requestedBy: user.sub,
     });
   }

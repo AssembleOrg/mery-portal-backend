@@ -4,6 +4,10 @@ import * as SibApiV3Sdk from '@sendinblue/client';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../shared/services';
 
+export const CAMPAIGNS = ['formaciones', 'mentorias-free'] as const;
+export type CampaignName = (typeof CAMPAIGNS)[number];
+const MENTORIAS_FREE_SLUGS = ['estilismo-de-cejas', 'modulo-ii-microblading-mg'];
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -32,6 +36,7 @@ export class EmailService {
     confirm: boolean;
     requestedBy: string;
     recipients?: Array<{ email: string; name: string }>;
+    campaign?: CampaignName;
   }): Promise<{
     dryRun: boolean;
     requestedBy: string;
@@ -57,12 +62,23 @@ export class EmailService {
         ).slice(0, 150)
       : (
           await this.prisma.user.findMany({
-            where: {
-              role: UserRole.USER,
-              isActive: true,
-              isEmailVerified: true,
-              deletedAt: null,
-            },
+            // Mentorías FREE: alumnas de Estilismo (Módulo 1) o Microblading
+            // Módulo 2, con acceso vigente o vencido.
+            where:
+              params.campaign === 'mentorias-free'
+                ? {
+                    role: UserRole.USER,
+                    deletedAt: null,
+                    categoryPurchases: {
+                      some: { category: { slug: { in: MENTORIAS_FREE_SLUGS } } },
+                    },
+                  }
+                : {
+                    role: UserRole.USER,
+                    isActive: true,
+                    isEmailVerified: true,
+                    deletedAt: null,
+                  },
             orderBy: { createdAt: 'asc' },
             take: Math.min(params.limit, 150),
             select: { id: true, email: true, firstName: true, lastName: true },
@@ -95,7 +111,11 @@ export class EmailService {
     try {
       for (const recipient of recipients) {
         try {
-          await this.sendFormacionesCampaignEmail(recipient.email, recipient.name);
+          if (params.campaign === 'mentorias-free') {
+            await this.sendMentoriasFreeEmail(recipient.email, recipient.name);
+          } else {
+            await this.sendFormacionesCampaignEmail(recipient.email, recipient.name);
+          }
           sent += 1;
         } catch (error) {
           failed.push({
@@ -106,7 +126,7 @@ export class EmailService {
       }
 
       this.logger.log(
-        `Formaciones campaign requested by ${params.requestedBy}: ${sent}/${recipients.length} sent`,
+        `Campaign ${params.campaign ?? 'formaciones'} requested by ${params.requestedBy}: ${sent}/${recipients.length} sent`,
       );
 
       return {
@@ -329,6 +349,33 @@ export class EmailService {
         `Failed to send formaciones campaign email to ${email}:`,
         error,
       );
+      throw error;
+    }
+  }
+
+  /** Aclaración Mentorías FREE para alumnas de Módulo 1 y 2. */
+  async sendMentoriasFreeEmail(email: string, name: string): Promise<void> {
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.sender = {
+      name: 'Mery Garcia - Cosmetic Tattoo',
+      email: this.configService.get<string>(
+        'EMAIL_FROM',
+        'noreply@merygarcia.com',
+      ),
+    };
+    sendSmtpEmail.replyTo = {
+      email: 'cursos@merygarcia.com.ar',
+      name: 'Academia Mery García',
+    };
+    sendSmtpEmail.to = [{ email, name }];
+    sendSmtpEmail.subject = 'ACLARACIÓN IMPORTANTE – Mentorías FREE';
+    sendSmtpEmail.htmlContent = this.getMentoriasFreeTemplate();
+
+    try {
+      await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      this.logger.log(`Mentorías FREE email sent to ${email}`);
+    } catch (error) {
+      this.logger.error(`Failed to send mentorías FREE email to ${email}:`, error);
       throw error;
     }
   }
@@ -1418,5 +1465,48 @@ export class EmailService {
       </body>
       </html>
     `;
+  }
+
+  private getMentoriasFreeTemplate(): string {
+    return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0; padding:0; background-color:#FBE8EA; font-family:Georgia, serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FBE8EA; padding:40px 12px;"><tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-top:4px solid #EBA2A8;">
+  <tr><td style="padding:0; text-align:center; background-color:#FBDFE4;">
+    <img src="https://mery-garcia.nyc3.cdn.digitaloceanspaces.com/mery-cuadro-rosa.png" width="280" alt="Mery García Formaciones" style="display:block; margin:0 auto; width:280px; max-width:70%; height:auto; border:0;">
+  </td></tr>
+  <tr><td style="padding:40px 40px 0; text-align:center;">
+    <div style="color:#545454; font-size:11px; letter-spacing:4px; text-transform:uppercase; font-family:'Helvetica Neue', Arial, sans-serif; margin-bottom:18px;">Aclaración del correo anterior</div>
+    <h1 style="margin:0; color:#000000; font-size:32px; line-height:1.25; font-weight:normal; font-family:Georgia, serif;">Mentorías<br>FREE</h1>
+    <div style="width:48px; height:2px; background-color:#EBA2A8; margin:24px auto 0; font-size:0; line-height:0;">&nbsp;</div>
+  </td></tr>
+  <tr><td style="padding:30px 40px 0;">
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Queridas alumnas: 💖</p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">¡Estamos muy felices de compartirles el calendario de mentorías! Queremos que estos encuentros sean espacios de aprendizaje, acompañamiento y crecimiento, donde puedan recibir una devolución personalizada sobre sus ejercicios, resolver todas sus dudas y seguir avanzando con confianza en su formación.</p>
+    <p style="margin:28px 0 10px; color:#000000; font-size:17px; line-height:1.6; font-weight:bold; font-family:Georgia, serif;">✨ ¡Un beneficio especial para ustedes!</p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Todas las alumnas que se hayan sumado a nuestras formaciones durante 2025 y 2026 cuentan con un <strong>primer encuentro de mentoría totalmente gratuito (FREE)</strong>.</p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Además, durante los próximos seis meses, tendrán la posibilidad de seguir perfeccionándose y potenciando sus habilidades a través de una propuesta especial: <strong>¡3 mentorías personalizadas al valor de 2!</strong></p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">El valor de esta propuesta dependerá de la formación que hayan elegido, por lo que pueden consultarnos para recibir toda la información.</p>
+    <p style="margin:28px 0 10px; color:#000000; font-size:17px; line-height:1.6; font-weight:bold; font-family:Georgia, serif;">🗓️ Días y horarios de las mentorías</p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Los encuentros se realizarán los días <strong>martes</strong>, en los siguientes horarios:<br>De <strong>17 a 18 h</strong>.<br>De <strong>18 a 19 h</strong>.</p>
+    <div style="height:10px; font-size:0; line-height:0;">&nbsp;</div>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Nuestro deseo es que estos espacios les permitan profundizar sus conocimientos, ganar seguridad, potenciar su creatividad y dar un nuevo salto en su carrera profesional.</p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Gracias por ser parte de esta comunidad y por confiar en nosotras para acompañarlas en este camino de crecimiento. 💕</p>
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">¡Las esperamos con muchísimas ganas de encontrarnos, escucharlas y seguir creciendo juntas!</p>
+  </td></tr>
+  <tr><td align="center" style="padding:16px 40px 0;">
+    <a href="https://merygarcia.com.ar/es/mi-cuenta" style="display:inline-block; background-color:#000000; color:#ffffff; text-decoration:none; padding:14px 32px; font-size:13px; letter-spacing:2px; text-transform:uppercase; font-family:'Helvetica Neue', Arial, sans-serif;">Ir a Mi cuenta</a>
+  </td></tr>
+  <tr><td style="padding:32px 40px 0; text-align:center;">
+    <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Con cariño,<br><strong>Academia Mery García</strong> ✨</p>
+  </td></tr>
+  <tr><td style="padding:24px 40px 48px; text-align:center;">
+    <p style="margin:0; color:#8a8a8a; font-size:11px; line-height:1.8; font-family:'Helvetica Neue', Arial, sans-serif; letter-spacing:0.3px;">
+      Recibís este correo porque sos alumna de las formaciones de merygarcia.com.ar.<br>
+      © ${new Date().getFullYear()} Mery García · Todos los derechos reservados.
+    </p>
+  </td></tr>
+</table></td></tr></table></body></html>`;
   }
 }
