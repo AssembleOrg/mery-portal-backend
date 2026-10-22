@@ -368,7 +368,7 @@ export class EmailService {
       name: 'Academia Mery García',
     };
     sendSmtpEmail.to = [{ email, name }];
-    sendSmtpEmail.subject = 'ACLARACIÓN IMPORTANTE – Mentorías FREE';
+    sendSmtpEmail.subject = 'IMPO! Mentorias FREE 💕';
     sendSmtpEmail.htmlContent = this.getMentoriasFreeTemplate();
 
     try {
@@ -1490,13 +1490,22 @@ export class EmailService {
     <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">El valor de esta propuesta dependerá de la formación que hayan elegido, por lo que pueden consultarnos para recibir toda la información.</p>
     <p style="margin:28px 0 10px; color:#000000; font-size:17px; line-height:1.6; font-weight:bold; font-family:Georgia, serif;">🗓️ Días y horarios de las mentorías</p>
     <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Los encuentros se realizarán los días <strong>martes</strong>, en los siguientes horarios:<br>De <strong>17 a 18 h</strong>.<br>De <strong>18 a 19 h</strong>.</p>
-    <div style="height:10px; font-size:0; line-height:0;">&nbsp;</div>
+  </td></tr>
+  <tr><td style="padding:12px 40px 30px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#000000;">
+      <tr><td style="padding:36px 28px; text-align:center;">
+        <div style="color:#EBA2A8; font-size:11px; letter-spacing:4px; text-transform:uppercase; font-family:'Helvetica Neue', Arial, sans-serif; margin-bottom:12px;">Tu primera mentoría</div>
+        <div style="color:#ffffff; font-size:30px; line-height:1.2; font-family:Georgia, serif; margin-bottom:16px;">es FREE ✨</div>
+        <p style="margin:0 0 24px; color:#e6e6e6; font-size:15px; line-height:1.7; font-family:Georgia, serif;">Reservala desde <strong style="color:#ffffff;">Mi cuenta</strong>, en la tarjeta de tu curso.</p>
+        <a href="https://merygarcia.com.ar/es/mi-cuenta" style="display:inline-block; background-color:#EBA2A8; color:#000000; text-decoration:none; padding:14px 32px; font-size:13px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; font-family:'Helvetica Neue', Arial, sans-serif;">Reservá tu mentoría</a>
+        <p style="margin:24px 0 0; color:#bdbdbd; font-size:13px; line-height:1.7; font-family:'Helvetica Neue', Arial, sans-serif;">El botón de reserva se habilita cuando completás todos los videos del curso (y el examen final, si tu curso lo tiene). Reservá con al menos 3 días de anticipación.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:0 40px;">
     <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Nuestro deseo es que estos espacios les permitan profundizar sus conocimientos, ganar seguridad, potenciar su creatividad y dar un nuevo salto en su carrera profesional.</p>
     <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Gracias por ser parte de esta comunidad y por confiar en nosotras para acompañarlas en este camino de crecimiento. 💕</p>
     <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">¡Las esperamos con muchísimas ganas de encontrarnos, escucharlas y seguir creciendo juntas!</p>
-  </td></tr>
-  <tr><td align="center" style="padding:16px 40px 0;">
-    <a href="https://merygarcia.com.ar/es/mi-cuenta" style="display:inline-block; background-color:#000000; color:#ffffff; text-decoration:none; padding:14px 32px; font-size:13px; letter-spacing:2px; text-transform:uppercase; font-family:'Helvetica Neue', Arial, sans-serif;">Ir a Mi cuenta</a>
   </td></tr>
   <tr><td style="padding:32px 40px 0; text-align:center;">
     <p style="margin:0 0 18px; color:#2B2B2B; font-size:16px; line-height:1.8; font-family:Georgia, serif;">Con cariño,<br><strong>Academia Mery García</strong> ✨</p>
