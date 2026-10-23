@@ -6,99 +6,93 @@ export interface ProblemReportData {
   phone?: string;
   description: string;
   recentRequests?: unknown[];
+  url?: string;
+}
+
+// El panel guarda hasta 20.000 caracteres de meta: si las requests no entran, se
+// mandan sin bodies y, si aun así no entran, solo las últimas.
+const MAX_META_CHARS = 18000;
+
+/** Reduce las requests recientes hasta que el meta entre en el límite del panel. */
+export function buildReportMeta(data: ProblemReportData): string {
+  const base = {
+    source: 'formulario-propio',
+    contact: { email: data.email, phone: data.phone || null },
+  };
+  const requests = Array.isArray(data.recentRequests) ? data.recentRequests : [];
+  const slim = requests.map((r) => {
+    if (!r || typeof r !== 'object') return r;
+    const { method, url, statusCode, timestamp, durationMs } = r as Record<string, unknown>;
+    return { method, url, statusCode, timestamp, durationMs };
+  });
+  for (const candidate of [requests, slim, slim.slice(-10), []]) {
+    const json = JSON.stringify({ ...base, recentRequests: candidate });
+    if (json.length <= MAX_META_CHARS) return json;
+  }
+  return JSON.stringify(base);
 }
 
 @Injectable()
 export class WhatsAppService {
   private readonly logger = new Logger(WhatsAppService.name);
 
-  private readonly pistechApiUrl: string;
-  private readonly pistechApiKey: string;
-  private readonly pistechGroupJid: string;
-  private readonly appName: string;
+  // Panel de ayuda de Pistech (whatsapp-pistech-neonize): el reporte entra como
+  // uno del widget, con historial, y avisa al grupo de soporte.
+  private readonly reportEndpoint: string;
+  private readonly reportToken: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.pistechApiUrl = this.configService.get<string>('PISTECH_WHATSAPP_API_URL', '');
-    this.pistechApiKey = this.configService.get<string>('PISTECH_WHATSAPP_API_KEY', '');
-    this.pistechGroupJid = this.configService.get<string>('PISTECH_WHATSAPP_GROUP_JID', '');
-    this.appName = this.configService.get<string>('PROBLEM_REPORT_APP_NAME', 'Frontend Web Mery');
+    this.reportEndpoint = this.configService
+      .get<string>(
+        'PISTECH_REPORT_ENDPOINT',
+        'https://whatsapp-pistech-neonize-production.up.railway.app',
+      )
+      .replace(/\/$/, '');
+    this.reportToken = this.configService.get<string>('PISTECH_REPORT_TOKEN', '');
   }
 
   isConfigured(): boolean {
-    return !!(this.pistechApiUrl && this.pistechApiKey && this.pistechGroupJid);
+    return !!(this.reportEndpoint && this.reportToken);
   }
 
   async reportProblem(data: ProblemReportData): Promise<void> {
     if (!this.isConfigured()) {
-      this.logger.warn('Pistech WhatsApp API no configurada. Reporte no enviado.');
+      this.logger.warn('PISTECH_REPORT_TOKEN no configurado. Reporte no enviado.');
       return;
     }
 
-    const now = new Date();
-    const timestamp = now.toLocaleString('es-AR', {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    const dateForFilename = now.toISOString().slice(0, 10);
-
-    const caption = [
-      '*REPORTE DE PROBLEMA*',
-      `*App:* ${this.appName}`,
-      `*Fecha:* ${timestamp}`,
-      '',
-      '*Descripción:*',
+    const description = [
       data.description,
       '',
-      '*Datos de contacto:*',
-      `• Email: ${data.email}`,
-      ...(data.phone ? [`• Tel: ${data.phone}`] : []),
+      `Email: ${data.email}`,
+      ...(data.phone ? [`Tel: ${data.phone}`] : []),
     ].join('\n');
 
-    const jsonReport = {
-      appName: this.appName,
-      timestamp: now.toISOString(),
-      userId: data.email,
-      description: data.description,
-      contact: {
-        email: data.email,
-        phone: data.phone || null,
-      },
-      recentRequests: data.recentRequests || [],
-    };
-
-    const base64 = Buffer.from(JSON.stringify(jsonReport, null, 2)).toString('base64');
+    const form = new FormData();
+    form.append('description', description);
+    form.append('userId', data.email);
+    form.append('category', 'bug');
+    if (data.url) form.append('url', data.url);
+    form.append('meta', buildReportMeta(data));
 
     try {
-      const response = await fetch(`${this.pistechApiUrl}/api/send/document`, {
+      const response = await fetch(`${this.reportEndpoint}/api/report`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.pistechApiKey,
-        },
-        body: JSON.stringify({
-          to: this.pistechGroupJid,
-          base64,
-          filename: `reporte-${dateForFilename}.json`,
-          mimetype: 'application/json',
-          caption,
-        }),
+        headers: { 'X-Project-Token': this.reportToken },
+        body: form,
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!response.ok) {
         const body = await response.text();
-        this.logger.error(`Error enviando reporte a WhatsApp (${response.status}): ${body}`);
+        this.logger.error(`Error enviando reporte al panel de Pistech (${response.status}): ${body}`);
         return;
       }
 
-      this.logger.log(`Reporte de problema enviado al grupo WhatsApp desde ${data.email}`);
+      this.logger.log(`Reporte de problema enviado al panel de Pistech desde ${data.email}`);
     } catch (error) {
       const err = error as Error;
-      this.logger.error(`Error enviando reporte a WhatsApp: ${err.message}`, err.stack);
+      this.logger.error(`Error enviando reporte al panel de Pistech: ${err.message}`, err.stack);
     }
   }
 }

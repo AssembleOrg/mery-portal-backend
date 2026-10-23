@@ -13,7 +13,7 @@ export class ProblemReportService {
     private readonly whatsAppService: WhatsAppService,
   ) {}
 
-  async create(createProblemReportDto: CreateProblemReportDto) {
+  async create(createProblemReportDto: CreateProblemReportDto, url?: string) {
     try {
       const { recentRequests, ...dbData } = createProblemReportDto;
       const newReport = await this.prisma.problemReport.create({
@@ -26,9 +26,10 @@ export class ProblemReportService {
           phone: createProblemReportDto.phone,
           description: createProblemReportDto.description,
           recentRequests: createProblemReportDto.recentRequests,
+          url,
         })
         .catch((err) => {
-          this.logger.error('Error notificando reporte por WhatsApp', err);
+          this.logger.error('Error notificando reporte al panel de Pistech', err);
         });
 
       return newReport;

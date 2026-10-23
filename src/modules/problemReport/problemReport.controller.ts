@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Public, Roles } from '~/shared/decorators';
 import { JwtAuthGuard, RolesGuard } from '~/shared/guards';
@@ -15,8 +15,11 @@ export class ProblemReportController {
   @Public()
   @ApiOperation({ summary: 'Crear un nuevo reporte de problema' })
   @ApiResponse({ status: 201, description: 'Reporte de problema creado exitosamente' })
-  async create(@Body() createProblemReportDto: CreateProblemReportDto) {
-    return this.problemReportService.create(createProblemReportDto);
+  async create(
+    @Body() createProblemReportDto: CreateProblemReportDto,
+    @Headers('referer') referer?: string,
+  ) {
+    return this.problemReportService.create(createProblemReportDto, referer);
   }
 
   // Devuelve email, teléfono y descripción de quienes reportaron: solo staff.
