@@ -25,6 +25,6 @@ import { StorageModule } from '../storage/storage.module';
     MentorshipIntegrationGuard,
     PrismaService,
   ],
-  exports: [MentorshipService],
+  exports: [MentorshipService, MentorshipWhatsappAlertService],
 })
 export class MentorshipModule {}

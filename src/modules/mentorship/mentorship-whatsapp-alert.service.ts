@@ -26,13 +26,17 @@ export class MentorshipWhatsappAlertService {
     params: BookingEmailParams,
     mailSent: boolean | null,
   ): Promise<void> {
+    await this.sendText(this.text(params, mailSent));
+  }
+
+  /** Manda un texto libre al chat del dueño (con 3 reintentos). */
+  async sendText(text: string): Promise<void> {
     const url = this.config.get<string>('MENTORSHIP_ALERT_WHATSAPP_URL', '');
     const secret = this.config.get<string>(
       'MENTORSHIP_ALERT_WHATSAPP_SECRET',
       '',
     );
     if (!url || !secret) return;
-    const text = this.text(params, mailSent);
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const res = await fetch(url, {

@@ -38,6 +38,9 @@ export const CHECKOUT_PROMO_MAX_INSTALLMENTS_KEY = 'checkout.promoMaxInstallment
 // Cupón-regalo del 20% que se emite al confirmar una compra.
 export const REWARDS_PURCHASE_COUPON_ACTIVE_KEY = 'rewards.purchaseCouponActive';
 
+// Tienda de mentorías: regalar una mentoría comprada a otra cuenta.
+export const SHOP_GIFTS_ENABLED_KEY = 'shop.giftsEnabled';
+
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
     key: CHAT_LIFETIME_DAYS_KEY,
@@ -131,6 +134,14 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     label: 'Cupón-regalo 20% por compra',
     description:
       'Si está activo, cada compra confirmada emite un cupón personal del 20% (6 meses) y manda un email de agradecimiento.',
+    type: 'boolean',
+    defaultValue: 'false',
+  },
+  {
+    key: SHOP_GIFTS_ENABLED_KEY,
+    label: 'Tienda de mentorías: regalar mentorías',
+    description:
+      'Si está activo, una alumna puede pasarle una mentoría comprada (sin usar) a otra cuenta registrada desde "Mis mentorías".',
     type: 'boolean',
     defaultValue: 'false',
   },
