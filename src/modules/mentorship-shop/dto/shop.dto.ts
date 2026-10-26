@@ -40,7 +40,7 @@ export class CartLineDto {
   quantity: number;
 }
 
-export class QuoteDto {
+export class ShopQuoteDto {
   @ApiProperty({ type: [CartLineDto] })
   @IsArray()
   @ArrayMinSize(1)
@@ -60,7 +60,7 @@ export class QuoteDto {
   code?: string;
 }
 
-export class CreateOrderDto extends QuoteDto {}
+export class ShopCreateOrderDto extends ShopQuoteDto {}
 
 export class GiftCreditDto {
   @ApiProperty({ description: 'Email de la cuenta que recibe la mentoría' })

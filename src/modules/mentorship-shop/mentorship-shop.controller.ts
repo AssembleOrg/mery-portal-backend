@@ -22,12 +22,12 @@ import type { JwtPayload } from '../../shared/types';
 import { UserRole } from '../../shared/types';
 import { MentorshipShopService } from './mentorship-shop.service';
 import {
-  CreateOrderDto,
+  ShopCreateOrderDto,
   CreatePackDto,
   GiftCreditDto,
   ListOrdersQueryDto,
   PromoDto,
-  QuoteDto,
+  ShopQuoteDto,
   ReviewOrderDto,
   ShopProductDto,
   UpdatePackDto,
@@ -52,12 +52,12 @@ export class MentorshipShopController {
 
   @Post('quote')
   @Public()
-  quote(@Body() dto: QuoteDto) {
+  quote(@Body() dto: ShopQuoteDto) {
     return this.shop.quote(dto);
   }
 
   @Post('orders')
-  createOrder(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
+  createOrder(@CurrentUser() user: JwtPayload, @Body() dto: ShopCreateOrderDto) {
     return this.shop.createOrder(user.sub, dto);
   }
 

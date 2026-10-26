@@ -31,11 +31,11 @@ import {
 } from './shop-pricing';
 import type {
   CartLineDto,
-  CreateOrderDto,
+  ShopCreateOrderDto,
   CreatePackDto,
   ListOrdersQueryDto,
   PromoDto,
-  QuoteDto,
+  ShopQuoteDto,
   ShopProductDto,
   UpdatePackDto,
 } from './dto';
@@ -375,7 +375,7 @@ export class MentorshipShopService {
     });
   }
 
-  private async computeQuote(dto: QuoteDto) {
+  private async computeQuote(dto: ShopQuoteDto) {
     const currency = METHOD_CURRENCY[dto.paymentMethod];
     const lines = await this.resolveLines(dto.lines, currency);
     const promos = await this.activePromos();
@@ -413,7 +413,7 @@ export class MentorshipShopService {
     return { quote, lines, codeStatus };
   }
 
-  async quote(dto: QuoteDto) {
+  async quote(dto: ShopQuoteDto) {
     const { quote, codeStatus } = await this.computeQuote(dto);
     return { ...quote, paymentMethod: dto.paymentMethod, code: codeStatus };
   }
@@ -422,7 +422,7 @@ export class MentorshipShopService {
   // Órdenes (alumna)
   // ===========================================================================
 
-  async createOrder(userId: string, dto: CreateOrderDto) {
+  async createOrder(userId: string, dto: ShopCreateOrderDto) {
     const { quote, lines, codeStatus } = await this.computeQuote(dto);
     if (codeStatus?.status === 'invalid') {
       throw new BadRequestException(codeStatus.message);
