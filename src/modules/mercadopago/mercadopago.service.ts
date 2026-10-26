@@ -9,6 +9,7 @@ import { ChatService } from '../chat/chat.service';
 import { RewardsService } from '../rewards/rewards.service';
 import { PresencialDepositsService } from '../presencial-classes/presencial-deposits.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { MentorshipShopService } from '../mentorship-shop/mentorship-shop.service';
 
 /** Precio centinela de los cursos que solo se venden en USD (no pasan por MP). */
 const USD_ONLY_SENTINEL = 99999999;
@@ -31,6 +32,7 @@ export class MercadoPagoService {
     private rewardsService: RewardsService,
     private presencialDeposits: PresencialDepositsService,
     private couponsService: CouponsService,
+    private mentorshipShop: MentorshipShopService,
   ) {
     this.accessToken = this.configService.get<string>('MP_ACCESS_TOKEN') || '';
     this.webhookSecret = this.configService.get<string>('MP_WEBHOOK_SECRET') || '';
@@ -184,6 +186,12 @@ export class MercadoPagoService {
         return;
       }
       await this.presencialDeposits.markPaid(signupId, transactionId);
+      return;
+    }
+
+    // Compras de la tienda de mentorías: otorgan créditos, no cursos.
+    if (payment.metadata?.type === 'mentorship_order') {
+      await this.mentorshipShop.handleMpApproved(payment);
       return;
     }
 

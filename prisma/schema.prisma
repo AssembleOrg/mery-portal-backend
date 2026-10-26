@@ -51,6 +51,7 @@ model User {
   coupons           Coupon[]           @relation("UserCoupons")
   mentorships       Mentorship[]
   mentorshipCredits MentorshipCredit[]
+  mentorshipOrders  MentorshipOrder[]
   presencialSignups PresencialSignup[]
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
@@ -473,6 +474,20 @@ model MentorshipProduct {
   variants MentorshipPriceVariant[]
   credits  MentorshipCredit[]
 
+  // Tienda de mentorías. shopOnly = no aparece en el catálogo del modal de
+  // compra viejo (GET /mentorship/products), solo en la tienda.
+  shopEnabled     Boolean  @default(false)
+  shopOnly        Boolean  @default(false)
+  shopPriceARS    Decimal? @db.Decimal(12, 2)
+  shopPriceUSD    Decimal? @db.Decimal(12, 2)
+  shopTagline     String?
+  shopImageUrl    String?
+  shopDurationMin Int?
+
+  packItems     MentorshipPackItem[]
+  promoProducts MentorshipPromoProduct[]
+  orderItems    MentorshipOrderItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -518,13 +533,177 @@ model MentorshipCredit {
   mentorshipId String? // mentoría online que consumió el crédito
   grantedById  String? // admin que lo otorgó
 
+  // Tienda: orden que lo generó, vencimiento (null = no vence) y regalo.
+  orderId          String?
+  order            MentorshipOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  expiresAt        DateTime?
+  giftedFromUserId String?
+  giftedAt         DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([status])
   @@index([categoryId])
+  @@index([orderId])
   @@map("mentorship_credits")
+}
+
+// ============================================================================
+// Tienda de mentorías: packs, promos y órdenes. Una orden pagada genera un
+// MentorshipCredit por cada mentoría (los packs se abren en sus productos).
+// ============================================================================
+
+enum MentorshipPromoKind {
+  BUY_X_PAY_Y // llevás buyQty, pagás payQty (3x2, 3x1…)
+  PERCENT // % de descuento
+}
+
+enum MentorshipOrderStatus {
+  PENDING // esperando el pago (MP) o la validación del admin (manual)
+  PAID // créditos otorgados
+  CANCELLED // la alumna o el admin la cancelaron sin pago
+  REJECTED // el admin no validó el pago
+}
+
+enum MentorshipPaymentMethod {
+  MERCADOPAGO // ARS, se acredita solo por webhook
+  TRANSFER // ARS, valida el admin
+  CASH // ARS, valida el admin
+  FOREIGN // USD desde el exterior, valida el admin
+}
+
+/// Combo de mentorías con precio propio (ej. "Módulo 1 + Módulo 2").
+model MentorshipPack {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  tagline     String?
+  imageUrl    String?
+  priceARS    Decimal? @db.Decimal(12, 2)
+  priceUSD    Decimal? @db.Decimal(12, 2)
+  isActive    Boolean  @default(true)
+  featured    Boolean  @default(false)
+  sortOrder   Int      @default(0)
+
+  items      MentorshipPackItem[]
+  orderItems MentorshipOrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("mentorship_packs")
+}
+
+model MentorshipPackItem {
+  id        String            @id @default(cuid())
+  packId    String
+  pack      MentorshipPack    @relation(fields: [packId], references: [id], onDelete: Cascade)
+  productId String
+  product   MentorshipProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int               @default(1)
+
+  @@unique([packId, productId])
+  @@map("mentorship_pack_items")
+}
+
+/// Promo de la tienda. Sin código se aplica sola; con código, al ingresarlo.
+/// Se aplica una sola promo por compra (la que más ahorra) y solo sobre
+/// mentorías sueltas: los packs ya tienen su precio.
+model MentorshipPromo {
+  id           String              @id @default(cuid())
+  name         String
+  kind         MentorshipPromoKind
+  buyQty       Int?
+  payQty       Int?
+  percent      Int?
+  code         String?             @unique
+  appliesToAll Boolean             @default(true)
+  validFrom    DateTime?
+  validTo      DateTime?
+  maxUses      Int?
+  isActive     Boolean             @default(true)
+
+  products MentorshipPromoProduct[]
+  orders   MentorshipOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("mentorship_promos")
+}
+
+model MentorshipPromoProduct {
+  id        String            @id @default(cuid())
+  promoId   String
+  promo     MentorshipPromo   @relation(fields: [promoId], references: [id], onDelete: Cascade)
+  productId String
+  product   MentorshipProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([promoId, productId])
+  @@map("mentorship_promo_products")
+}
+
+model MentorshipOrder {
+  id            String                  @id @default(cuid())
+  number        Int                     @unique @default(autoincrement())
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        MentorshipOrderStatus   @default(PENDING)
+  paymentMethod MentorshipPaymentMethod
+  currency      String // "ARS" | "USD"
+  subtotal      Decimal                 @db.Decimal(12, 2)
+  discount      Decimal                 @default(0) @db.Decimal(12, 2)
+  total         Decimal                 @db.Decimal(12, 2)
+  promoId       String?
+  promo         MentorshipPromo?        @relation(fields: [promoId], references: [id], onDelete: SetNull)
+  promoLabel    String?
+
+  mpPreferenceId String?
+  mpPaymentId    String?   @unique
+  paidAt         DateTime?
+  reviewedById   String? // admin que aprobó / rechazó
+  reviewedAt     DateTime?
+  adminNote      String?
+
+  items   MentorshipOrderItem[]
+  credits MentorshipCredit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("mentorship_orders")
+}
+
+enum MentorshipOrderItemKind {
+  PRODUCT
+  PACK
+}
+
+/// Renglón de la orden con foto de precio y contenido al momento de comprar.
+model MentorshipOrderItem {
+  id        String                  @id @default(cuid())
+  orderId   String
+  order     MentorshipOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind      MentorshipOrderItemKind
+  productId String?
+  product   MentorshipProduct?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  packId    String?
+  pack      MentorshipPack?         @relation(fields: [packId], references: [id], onDelete: SetNull)
+  name      String
+  quantity  Int
+  unitPrice Decimal                 @db.Decimal(12, 2)
+  lineTotal Decimal                 @db.Decimal(12, 2)
+  /// Créditos que da UNA unidad: [{ productId, name, type, categoryId, quantity }]
+  contents  Json
+
+  @@index([orderId])
+  @@map("mentorship_order_items")
 }
 
 // ============================================================================
@@ -579,17 +758,17 @@ model PresencialPrice {
 /// Argentina). Puede haber más de una el mismo día (ej. Estilismo 14–18 y
 /// Tatuaje 10–18). Las inscriptas NO ven cuántas hay; el admin sí.
 model PresencialClass {
-  id          String                @id @default(cuid())
-  title       String
-  description String?
-  startAt     DateTime
-  endAt       DateTime
-  startHour   Int // 9..17
-  endHour     Int // 10..18
-  status      PresencialClassStatus @default(TENTATIVE)
+  id                 String                @id @default(cuid())
+  title              String
+  description        String?
+  startAt            DateTime
+  endAt              DateTime
+  startHour          Int // 9..17
+  endHour            Int // 10..18
+  status             PresencialClassStatus @default(TENTATIVE)
   // Si está activo, solo se anotan alumnas con compra activa de alguna de las
   // formaciones de la clase. Por defecto la inscripción es libre.
-  restrictToStudents Boolean   @default(false)
+  restrictToStudents Boolean               @default(false)
   confirmedAt        DateTime?
 
   // Seña que se cobra para reservar un lugar. null = sin seña (no reservable).
@@ -622,13 +801,13 @@ model PresencialClassCategory {
 /// Inscripción de una alumna a una clase presencial. Máximo 1 activa
 /// (PENDING/CONFIRMED) por alumna — índice único parcial en la migración.
 model PresencialSignup {
-  id      String                 @id @default(cuid())
-  classId String
-  class   PresencialClass        @relation(fields: [classId], references: [id], onDelete: Cascade)
-  userId  String
-  user    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status  PresencialSignupStatus @default(PENDING)
-  note    String?
+  id          String                 @id @default(cuid())
+  classId     String
+  class       PresencialClass        @relation(fields: [classId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      PresencialSignupStatus @default(PENDING)
+  note        String?
   confirmedAt DateTime?
 
   // --- Seña (Mercado Pago) ---
@@ -638,12 +817,12 @@ model PresencialSignup {
   depositStatus        PresencialDepositStatus @default(NONE)
   // Monto efectivamente cobrado en pesos y, si el precio estaba en dólares, el
   // valor original y la cotización usada (queda como comprobante histórico).
-  depositAmountARS Decimal? @db.Decimal(10, 2)
-  depositAmountUSD Decimal? @db.Decimal(10, 2)
-  depositRate      Decimal? @db.Decimal(10, 2)
-  mpPreferenceId   String?
-  mpPaymentId      String?
-  depositPaidAt    DateTime?
+  depositAmountARS     Decimal?                @db.Decimal(10, 2)
+  depositAmountUSD     Decimal?                @db.Decimal(10, 2)
+  depositRate          Decimal?                @db.Decimal(10, 2)
+  mpPreferenceId       String?
+  mpPaymentId          String?
+  depositPaidAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -662,9 +841,9 @@ model PresencialSignup {
 /// Notificación in-app de un usuario (admin o alumna). Se muestra en la campana
 /// y, si el dispositivo se suscribió, también llega como push del navegador.
 model Notification {
-  id     String @id @default(cuid())
+  id     String    @id @default(cuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   type   String // presencial_confirmed | presencial_rejected | presencial_class_cancelled | presencial_signup | presencial_signup_cancelled | mentorship_booked | mentorship_rescheduled | mentorship_cancelled | mentorship_credit_granted | ...
   title  String
   body   String?
@@ -681,10 +860,10 @@ model Notification {
 
 /// Suscripción Web Push de un dispositivo/navegador de un usuario (opt-in).
 model PushSubscription {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String @unique
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String  @unique
   p256dh    String
   auth      String
   userAgent String?

@@ -361,7 +361,10 @@ export class MentorshipService {
         userId,
         type: 'MENTORSHIP',
         status: 'AVAILABLE',
-        OR: [{ categoryId: null }, { categoryId }],
+        AND: [
+          { OR: [{ categoryId: null }, { categoryId }] },
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        ],
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -422,6 +425,7 @@ export class MentorshipService {
   }
 
   async book(userId: string, dto: BookMentorshipDto) {
+    if (dto.creditId) return this.bookWithShopCredit(userId, dto.creditId, dto);
     const { categoryId } = dto;
     const purchase = await this.activePurchase(userId, categoryId);
     if (!purchase || !purchase.isActive) {
@@ -458,7 +462,69 @@ export class MentorshipService {
       creditId = credit.id;
     }
 
-    const slot = await this.findMatchingSlot(dto.start);
+    return this.createBooking(userId, categoryId, dto, creditId);
+  }
+
+  /**
+   * Reserva con un crédito comprado en la tienda. A diferencia de la reserva
+   * del curso, no exige tener el curso comprado ni bloquea por una mentoría ya
+   * cumplida: solo que no haya otra agendada del mismo curso.
+   */
+  private async bookWithShopCredit(
+    userId: string,
+    creditId: string,
+    dto: BookMentorshipDto,
+  ) {
+    const now = new Date();
+    const credit = await this.prisma.mentorshipCredit.findFirst({
+      where: { id: creditId, userId, orderId: { not: null } },
+    });
+    if (!credit) throw new NotFoundException('Mentoría no encontrada');
+    if (credit.type !== 'MENTORSHIP') {
+      throw new BadRequestException('Esta clase se coordina por WhatsApp, no por calendario.');
+    }
+    if (credit.status !== 'AVAILABLE') {
+      throw new ConflictException('Esta mentoría ya está reservada.');
+    }
+    if (credit.expiresAt && credit.expiresAt <= now) {
+      throw new ForbiddenException('Esta mentoría venció.');
+    }
+    const categoryId = credit.categoryId ?? dto.categoryId;
+    if (credit.categoryId && dto.categoryId && dto.categoryId !== credit.categoryId) {
+      throw new BadRequestException('La mentoría no corresponde a ese curso.');
+    }
+    const scheduled = await this.prisma.mentorship.findFirst({
+      where: { userId, categoryId, status: MentorshipStatus.SCHEDULED },
+    });
+    if (scheduled) {
+      throw new ConflictException(
+        'Ya tenés una mentoría agendada de este curso. Cuando pase, podés reservar la siguiente.',
+      );
+    }
+    const claimed = await this.prisma.mentorshipCredit.updateMany({
+      where: { id: credit.id, status: 'AVAILABLE' },
+      data: { status: 'USED' },
+    });
+    if (claimed.count === 0) {
+      throw new ConflictException('Esta mentoría ya está reservada. Actualizá la página.');
+    }
+    return this.createBooking(userId, categoryId, dto, credit.id);
+  }
+
+  /** Crea la reserva con el crédito ya tomado (si hay); lo libera si falla. */
+  private async createBooking(
+    userId: string,
+    categoryId: string,
+    dto: BookMentorshipDto,
+    creditId: string | null,
+  ) {
+    let slot: Slot;
+    try {
+      slot = await this.findMatchingSlot(dto.start);
+    } catch (err) {
+      await this.unclaimCredit(creditId);
+      throw err;
+    }
 
     // Si ya había cargado material en una reserva cancelada de este curso, la
     // nueva lo hereda: no tiene que volver a subir todo.
@@ -507,14 +573,7 @@ export class MentorshipService {
       return this.serialize(booked);
     } catch (err) {
       // Si falló la creación tras haber reservado el crédito, lo liberamos.
-      if (creditId) {
-        await this.prisma.mentorshipCredit
-          .updateMany({
-            where: { id: creditId, status: 'USED', mentorshipId: null },
-            data: { status: 'AVAILABLE' },
-          })
-          .catch(() => undefined);
-      }
+      await this.unclaimCredit(creditId);
       // Índices únicos parciales: race condition o mentoría ya existente.
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -532,6 +591,17 @@ export class MentorshipService {
       }
       throw err;
     }
+  }
+
+  /** Devuelve a disponible un crédito tomado para una reserva que no se creó. */
+  private async unclaimCredit(creditId: string | null) {
+    if (!creditId) return;
+    await this.prisma.mentorshipCredit
+      .updateMany({
+        where: { id: creditId, status: 'USED', mentorshipId: null },
+        data: { status: 'AVAILABLE' },
+      })
+      .catch(() => undefined);
   }
 
   async reschedule(userId: string, mentorshipId: string, startIso: string) {
@@ -879,7 +949,8 @@ export class MentorshipService {
   /** Catálogo público: productos activos con sus variantes activas. */
   async listProductsPublic() {
     const products = await this.prisma.mentorshipProduct.findMany({
-      where: { isActive: true },
+      // Los productos solo-tienda no aparecen en el modal de compra del curso.
+      where: { isActive: true, shopOnly: false },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       include: {
         category: { select: { id: true, name: true, slug: true } },

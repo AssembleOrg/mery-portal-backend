@@ -27,6 +27,14 @@ export class BookMentorshipDto {
   @ApiProperty({ description: 'Email para la meet (default = email logueado)' })
   @IsEmail()
   meetingEmail: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Crédito de la tienda a usar (no exige tener el curso comprado)',
+  })
+  @IsOptional()
+  @IsString()
+  creditId?: string;
 }
 
 export class RescheduleMentorshipDto {

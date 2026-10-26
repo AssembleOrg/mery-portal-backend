@@ -24,6 +24,7 @@ import { SettingsModule } from './modules/settings';
 import { RewardsModule } from './modules/rewards/rewards.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MentorshipModule } from './modules/mentorship/mentorship.module';
+import { MentorshipShopModule } from './modules/mentorship-shop/mentorship-shop.module';
 import { PresencialClassesModule } from './modules/presencial-classes';
 import { NotificationsModule } from './modules/notifications';
 import { PublicCatalogModule } from './modules/public-catalog';
@@ -77,6 +78,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     RewardsModule,
     CheckoutModule,
     MentorshipModule,
+    MentorshipShopModule,
     PresencialClassesModule,
     NotificationsModule,
     PublicCatalogModule,

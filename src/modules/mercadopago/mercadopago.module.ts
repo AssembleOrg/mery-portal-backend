@@ -8,6 +8,7 @@ import { ChatModule } from '../chat/chat.module';
 import { RewardsModule } from '../rewards/rewards.module';
 import { PresencialClassesModule } from '../presencial-classes/presencial-classes.module';
 import { CouponsModule } from '../coupons/coupons.module';
+import { MentorshipShopModule } from '../mentorship-shop/mentorship-shop.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { CouponsModule } from '../coupons/coupons.module';
     RewardsModule,
     PresencialClassesModule,
     CouponsModule,
+    MentorshipShopModule,
   ],
   controllers: [MercadoPagoController, WebhookAliasController],
   providers: [MercadoPagoService, PrismaService],
