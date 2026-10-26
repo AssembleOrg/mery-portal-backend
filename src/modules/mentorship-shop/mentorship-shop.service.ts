@@ -121,7 +121,12 @@ export class MentorshipShopService {
       this.config.get<string>('FRONTEND_URL') ||
       ''
     ).replace(/\/$/, '');
-    this.webhookUrl = this.config.get<string>('MP_WEBHOOK_URL') || '';
+    // Sin MP_WEBHOOK_URL, el aviso de MP iría solo a la URL configurada en la
+    // cuenta: se arma la del propio backend (mismo endpoint que usan los cursos).
+    const publicDomain = this.config.get<string>('RAILWAY_PUBLIC_DOMAIN');
+    this.webhookUrl =
+      this.config.get<string>('MP_WEBHOOK_URL') ||
+      (publicDomain ? `https://${publicDomain}/api/webhook` : '');
   }
 
   // ===========================================================================
@@ -446,9 +451,7 @@ export class MentorshipShopService {
         discount: new Prisma.Decimal(quote.discount),
         total: new Prisma.Decimal(quote.total),
         promoId: quote.promo?.id ?? null,
-        promoLabel: quote.promo
-          ? `${quote.promo.name} (${quote.promo.label})`
-          : null,
+        promoLabel: quote.promo ? this.promoDisplay(quote.promo) : null,
         items: {
           create: quote.lines.map((l, i) => ({
             kind: l.kind,
@@ -1416,6 +1419,13 @@ export class MentorshipShopService {
       .catch((err) =>
         this.logger.error('Aviso de compra al dueño falló', err as Error),
       );
+  }
+
+  /** "Promo primavera (3x2)"; si el nombre ya dice "3x2", no se repite. */
+  private promoDisplay(p: { name: string; label: string }) {
+    return p.name.toLowerCase().includes(p.label.toLowerCase())
+      ? p.name
+      : `${p.name} (${p.label})`;
   }
 
   private studentName(u: {
