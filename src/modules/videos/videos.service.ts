@@ -4,6 +4,7 @@ import { VimeoService } from '../vimeo/vimeo.service';
 import { PaginatedResponse } from '../../shared/types';
 import { CreateVideoDto, UpdateVideoDto, VideoResponseDto, VideoQueryDto, UploadVideoDto, UploadStatusDto } from './dto';
 import { plainToClass } from 'class-transformer';
+import { mergeVideoProgress } from './video-progress';
 import * as fs from 'fs';
 
 @Injectable()
@@ -390,17 +391,18 @@ export class VideosService {
       throw new NotFoundException('Video no encontrado');
     }
 
-    const progress = video.duration ? Math.min(100, Math.round((watchedSeconds / video.duration) * 100)) : 0;
+    const where = { userId_videoId: { userId, videoId } };
+    const previous = await this.prisma.videoView.findUnique({
+      where,
+      select: { watchedSeconds: true, progress: true, completed: true },
+    });
+    const next = mergeVideoProgress(previous, watchedSeconds, video.duration, completed);
 
     await this.prisma.videoView.update({
-      where: {
-        userId_videoId: { userId, videoId },
-      },
+      where,
       data: {
-        watchedSeconds,
+        ...next,
         totalSeconds: video.duration,
-        progress,
-        completed,
         lastWatchedAt: new Date(),
       },
     });
