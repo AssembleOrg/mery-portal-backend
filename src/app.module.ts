@@ -22,6 +22,7 @@ import { QuizModule } from './modules/quiz';
 import { FormsModule } from './modules/forms';
 import { SettingsModule } from './modules/settings';
 import { RewardsModule } from './modules/rewards/rewards.module';
+import { PromoModule } from './modules/promo/promo.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MentorshipModule } from './modules/mentorship/mentorship.module';
 import { MentorshipShopModule } from './modules/mentorship-shop/mentorship-shop.module';
@@ -76,6 +77,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     FormsModule,
     SettingsModule,
     RewardsModule,
+    PromoModule,
     CheckoutModule,
     MentorshipModule,
     MentorshipShopModule,

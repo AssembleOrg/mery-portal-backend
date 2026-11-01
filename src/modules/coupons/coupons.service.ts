@@ -224,6 +224,23 @@ export class CouponsService {
       return { valid: false, discountPercent: 0, couponCode: dto.code, couponId: null, applicableCategoryIds: [], message: 'El cupón no aplica para los cursos seleccionados' };
     }
 
+    // Los cursos en promo (precio bajado con snapshot en originalPrice*) no se
+    // combinan con cupones: el descuento de la promo no se suma.
+    const onPromo = await this.prisma.videoCategory.findMany({
+      where: {
+        id: { in: applicableCategoryIds },
+        OR: [{ originalPriceARS: { not: null } }, { originalPriceUSD: { not: null } }],
+      },
+      select: { id: true },
+    });
+    if (onPromo.length > 0) {
+      const onPromoSet = new Set(onPromo.map((c) => c.id));
+      applicableCategoryIds = applicableCategoryIds.filter((id) => !onPromoSet.has(id));
+      if (applicableCategoryIds.length === 0) {
+        return { valid: false, discountPercent: 0, couponCode: dto.code, couponId: null, applicableCategoryIds: [], message: 'Los cursos en promo no se combinan con cupones' };
+      }
+    }
+
     // "Otra formación": excluye las categorías que el usuario ya compró.
     if (coupon.excludeOwnedCategories && userId) {
       const owned = await this.prisma.categoryPurchase.findMany({

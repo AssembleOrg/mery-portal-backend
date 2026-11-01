@@ -41,6 +41,10 @@ export const REWARDS_PURCHASE_COUPON_ACTIVE_KEY = 'rewards.purchaseCouponActive'
 // Tienda de mentorías: regalar una mentoría comprada a otra cuenta.
 export const SHOP_GIFTS_ENABLED_KEY = 'shop.giftsEnabled';
 
+// Cierre automático de la promo de formaciones: a esta fecha se restauran los
+// precios desde originalPrice* y se avisa por mail.
+export const PROMO_AUTO_CLOSE_AT_KEY = 'promo.autoCloseAt';
+
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
   {
     key: CHAT_LIFETIME_DAYS_KEY,
@@ -144,6 +148,15 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       'Si está activo, una alumna puede pasarle una mentoría comprada (sin usar) a otra cuenta registrada desde "Mis mentorías".',
     type: 'boolean',
     defaultValue: 'false',
+  },
+  {
+    key: PROMO_AUTO_CLOSE_AT_KEY,
+    label: 'Cierre automático de la promo de formaciones',
+    description:
+      'Fecha y hora (ej. 2026-11-10T00:00:00-03:00) en que se vuelven a poner los precios previos a la promo y se avisa por mail a MENTORSHIP_ALERT_EMAILS. Vacío = no hay cierre programado.',
+    type: 'string',
+    defaultValue: '',
+    max: 40,
   },
 ];
 
