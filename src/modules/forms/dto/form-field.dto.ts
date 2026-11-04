@@ -87,4 +87,9 @@ export class FormFieldDto {
   @IsString()
   @MaxLength(300)
   contextLabel?: string;
+
+  @ApiPropertyOptional({ description: 'yesno: el contexto aparece solo al responder Sí y ahí es obligatorio' })
+  @IsOptional()
+  @IsBoolean()
+  contextOnYes?: boolean;
 }

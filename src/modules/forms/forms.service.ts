@@ -76,6 +76,7 @@ export class FormsService {
       if (field.type !== 'yesno') {
         delete normalized.allowContext;
         delete normalized.contextLabel;
+        delete normalized.contextOnYes;
       }
 
       return normalized;
@@ -399,8 +400,12 @@ export class FormsService {
             throw new BadRequestException(`Valor inválido para "${field.label}"`);
           }
           const answer: YesNoAnswer = { value: obj.value };
-          if (field.allowContext && typeof obj.context === 'string' && obj.context.trim()) {
+          const canHaveContext = field.contextOnYes ? obj.value : field.allowContext;
+          if (canHaveContext && typeof obj.context === 'string' && obj.context.trim()) {
             answer.context = obj.context.trim().slice(0, MAX_TEXT_LENGTH);
+          }
+          if (field.contextOnYes && obj.value && !answer.context) {
+            throw new BadRequestException(`Falta completar "${field.contextLabel || field.label}"`);
           }
           clean[field.id] = answer;
           break;
