@@ -14,6 +14,8 @@ import { MentorshipWhatsappAlertService } from './mentorship-whatsapp-alert.serv
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StorageService } from '../storage/storage.service';
+import { SettingsService } from '../settings/settings.service';
+import { MENTORSHIP_EXTRA_SLOTS_KEY } from '../settings/setting-definitions';
 import {
   BookMentorshipDto,
   SaveMaterialDto,
@@ -32,8 +34,8 @@ const AR_OFFSET = '-03:00';
 const BOOKING_CUTOFF_DAYS = 3;
 /** Anticipación mínima para reprogramar o cancelar. */
 const CHANGE_MIN_HOURS = 72;
-/** Cuántas semanas hacia adelante se generan horarios. */
-const HORIZON_DAYS = 8 * 7;
+/** Último día (hora AR) para el que se generan horarios. */
+const HORIZON_END_DATE = '2027-12-31';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ponytail: formato de material fijo para Estilismo; pasar a config por curso si otra formación lo pide.
@@ -77,6 +79,27 @@ export interface Slot {
   end: Date;
 }
 
+/**
+ * Horarios puntuales, fuera de la plantilla semanal.
+ * Formato: "2026-11-10 11:00-12:00, 2026-11-10 13:00-14:00" (hora AR).
+ * Lo que no respeta el formato o termina antes de empezar se ignora.
+ */
+export function parseExtraSlots(raw: string): Slot[] {
+  const slots: Slot[] = [];
+  for (const item of raw.split(',')) {
+    const m = item
+      .trim()
+      .match(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    if (!m) continue;
+    const start = new Date(`${m[1]}T${m[2]}:00${AR_OFFSET}`);
+    const end = new Date(`${m[1]}T${m[3]}:00${AR_OFFSET}`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+    if (end <= start) continue;
+    slots.push({ start, end });
+  }
+  return slots;
+}
+
 @Injectable()
 export class MentorshipService {
   private readonly logger = new Logger(MentorshipService.name);
@@ -89,6 +112,7 @@ export class MentorshipService {
     private readonly gateway: ChatGateway,
     private readonly notifications: NotificationsService,
     private readonly storage: StorageService,
+    private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -251,27 +275,41 @@ export class MentorshipService {
   // Generación de horarios disponibles
   // ---------------------------------------------------------------------------
 
-  /** Genera todos los horarios futuros según las plantillas activas. */
+  /** Genera los horarios de las plantillas activas más los puntuales, sin repetir inicio. */
   private async generateSlots(): Promise<Slot[]> {
-    const templates = await this.prisma.mentorshipAvailability.findMany({
-      where: { isActive: true },
-    });
-    if (templates.length === 0) return [];
+    const [templates, extraRaw] = await Promise.all([
+      this.prisma.mentorshipAvailability.findMany({
+        where: { isActive: true },
+      }),
+      this.settings.getString(MENTORSHIP_EXTRA_SLOTS_KEY),
+    ]);
 
+    const byStart = new Map<number, Slot>();
     const today = this.arDateStr(new Date());
-    const slots: Slot[] = [];
-    for (let i = 0; i <= HORIZON_DAYS; i++) {
-      const dateStr = this.addDays(today, i);
-      const wd = this.weekdayOf(dateStr);
-      for (const t of templates) {
-        if (t.weekday !== wd) continue;
-        slots.push({
-          start: this.slotDate(dateStr, t.startMin),
-          end: this.slotDate(dateStr, t.endMin),
-        });
+    if (templates.length > 0) {
+      for (
+        let dateStr = today;
+        dateStr <= HORIZON_END_DATE;
+        dateStr = this.addDays(dateStr, 1)
+      ) {
+        const wd = this.weekdayOf(dateStr);
+        for (const t of templates) {
+          if (t.weekday !== wd) continue;
+          const start = this.slotDate(dateStr, t.startMin);
+          byStart.set(start.getTime(), {
+            start,
+            end: this.slotDate(dateStr, t.endMin),
+          });
+        }
       }
     }
-    return slots;
+    // Si coincide con la plantilla, manda el horario puntual.
+    for (const slot of parseExtraSlots(extraRaw)) {
+      byStart.set(slot.start.getTime(), slot);
+    }
+    return [...byStart.values()].sort(
+      (a, b) => a.start.getTime() - b.start.getTime(),
+    );
   }
 
   /** true si el horario respeta la anticipación mínima (3 días) y es futuro. */

@@ -20,6 +20,7 @@ export interface SettingDefinition {
   allowedValues?: string[];
 }
 
+export const MENTORSHIP_EXTRA_SLOTS_KEY = 'mentorship.extraSlots';
 export const CHAT_LIFETIME_DAYS_KEY = 'chat.lifetimeDays';
 export const CHAT_CLOSING_MESSAGE_KEY = 'chat.closingMessage';
 
@@ -148,6 +149,15 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       'Si está activo, una alumna puede pasarle una mentoría comprada (sin usar) a otra cuenta registrada desde "Mis mentorías".',
     type: 'boolean',
     defaultValue: 'false',
+  },
+  {
+    key: MENTORSHIP_EXTRA_SLOTS_KEY,
+    label: 'Mentorías: horarios puntuales',
+    description:
+      'Horarios extra para una fecha, además de los semanales. Separados por coma, hora de Argentina. Ej: 2026-11-10 11:00-12:00, 2026-11-10 13:00-14:00',
+    type: 'string',
+    defaultValue: '',
+    max: 2000,
   },
   {
     key: PROMO_AUTO_CLOSE_AT_KEY,

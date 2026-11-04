@@ -13,9 +13,16 @@ import { PrismaService } from '../../shared/services';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StorageModule } from '../storage/storage.module';
+import { SettingsModule } from '../settings/settings.module';
 
 @Module({
-  imports: [ConfigModule, ChatModule, NotificationsModule, StorageModule],
+  imports: [
+    ConfigModule,
+    ChatModule,
+    NotificationsModule,
+    StorageModule,
+    SettingsModule,
+  ],
   controllers: [MentorshipController, MentorshipIntegrationController],
   providers: [
     MentorshipService,
