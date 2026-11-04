@@ -19,20 +19,58 @@ import {
   UpdateResponseStatusDto,
 } from './dto';
 import { EmailService } from '../email/email.service';
+import { StorageService } from '../storage';
 
 const TIMEZONE = 'America/Argentina/Buenos_Aires';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CHOICE_TYPES = ['select', 'radio', 'checkbox'];
 const MAX_TEXT_LENGTH = 5000;
 
+const MAX_MEDIA_IMAGES = 6;
+const MAX_MEDIA_LINKS = 3;
+const MAX_LINK_LENGTH = 500;
+/** Tope por formulario y por día: el endpoint es público y cada imagen ocupa espacio pago. */
+const MAX_UPLOADS_PER_FORM_PER_DAY = 500;
+
 type YesNoAnswer = { value: boolean; context?: string };
+type MediaAnswer = { images: string[]; links: string[] };
+
+/** Tipo real según los primeros bytes: no se confía en lo que declara el navegador. */
+function sniffImageType(buffer: Buffer): string | null {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (buffer.length >= 4 && buffer.subarray(0, 4).toString('hex') === '89504e47') {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('latin1') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
 
 @Injectable()
 export class FormsService {
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
+    private storage: StorageService,
   ) {}
+
+  /** Contador en memoria: alcanza como freno y se reinicia con cada deploy. */
+  private readonly uploadsToday = new Map<string, { day: string; count: number }>();
 
   // ============ Helpers ============
 
@@ -290,7 +328,7 @@ export class FormsService {
     }
 
     const fields = (form.fields as unknown as FormFieldDto[]) || [];
-    const cleanAnswers = this.validateAnswers(fields, dto.answers);
+    const cleanAnswers = this.validateAnswers(fields, dto.answers, form.id);
 
     const emailField = fields.find((f) => f.type === 'email' && f.id);
     const email = emailField ? (cleanAnswers[emailField.id!] as string | undefined) || null : null;
@@ -333,6 +371,71 @@ export class FormsService {
     };
   }
 
+  /** Sube una imagen de un campo "media" de un formulario publicado. */
+  async uploadPublicImage(slug: string, fieldId: string, file: Express.Multer.File) {
+    const form = await this.prisma.form.findFirst({
+      where: { slug, deletedAt: null, status: 'published' },
+    });
+    if (!form) {
+      throw new NotFoundException('Formulario no encontrado');
+    }
+    const fields = (form.fields as unknown as FormFieldDto[]) || [];
+    if (!fields.some((f) => f.id === fieldId && f.type === 'media')) {
+      throw new BadRequestException('Este campo no admite imágenes');
+    }
+
+    const contentType = sniffImageType(file.buffer);
+    if (!contentType) {
+      throw new BadRequestException('Solo se aceptan imágenes JPG, PNG o WEBP');
+    }
+
+    const day = DateTime.now().setZone(TIMEZONE).toISODate() ?? '';
+    const used = this.uploadsToday.get(form.id);
+    const count = used && used.day === day ? used.count : 0;
+    if (count >= MAX_UPLOADS_PER_FORM_PER_DAY) {
+      throw new BadRequestException('No pudimos recibir más imágenes hoy. Probá pegando un link.');
+    }
+    this.uploadsToday.set(form.id, { day, count: count + 1 });
+
+    const { url } = await this.storage.uploadBuffer({
+      buffer: file.buffer,
+      contentType,
+      folder: `forms/${form.id}`,
+    });
+    return { url };
+  }
+
+  /** Solo imágenes subidas a este formulario, y links http(s). */
+  private validateMediaAnswer(formId: string, field: FormFieldDto, raw: unknown): MediaAnswer | null {
+    const invalid = () => new BadRequestException(`Valor inválido para "${field.label}"`);
+    const { images = [], links = [] } = (raw ?? {}) as Partial<MediaAnswer>;
+    if (typeof raw !== 'object' || !Array.isArray(images) || !Array.isArray(links)) {
+      throw invalid();
+    }
+    if (images.length > MAX_MEDIA_IMAGES) {
+      throw new BadRequestException(`Podés subir hasta ${MAX_MEDIA_IMAGES} imágenes`);
+    }
+    if (links.length > MAX_MEDIA_LINKS) {
+      throw new BadRequestException(`Podés pegar hasta ${MAX_MEDIA_LINKS} links`);
+    }
+
+    const prefix = this.storage.publicUrl(`forms/${formId}/`);
+    if (images.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) {
+      throw invalid();
+    }
+    if (links.some((u) => typeof u !== 'string' || u.length > MAX_LINK_LENGTH || !isHttpUrl(u))) {
+      throw new BadRequestException(`Revisá los links de "${field.label}"`);
+    }
+
+    if (images.length === 0 && links.length === 0) {
+      if (field.required) {
+        throw new BadRequestException(`El campo "${field.label}" es obligatorio`);
+      }
+      return null;
+    }
+    return { images: Array.from(new Set(images)), links: Array.from(new Set(links)) };
+  }
+
   /**
    * Validate submitted answers against the form's field definitions.
    * Returns a clean answers object containing only known field IDs.
@@ -340,6 +443,7 @@ export class FormsService {
   private validateAnswers(
     fields: FormFieldDto[],
     answers: Record<string, unknown>,
+    formId = '',
   ): Record<string, unknown> {
     const clean: Record<string, unknown> = {};
 
@@ -408,6 +512,11 @@ export class FormsService {
             throw new BadRequestException(`Falta completar "${field.contextLabel || field.label}"`);
           }
           clean[field.id] = answer;
+          break;
+        }
+        case 'media': {
+          const media = this.validateMediaAnswer(formId, field, raw);
+          if (media) clean[field.id] = media;
           break;
         }
       }
@@ -661,6 +770,10 @@ export class FormsService {
         if (field.type === 'yesno') {
           const v = value as YesNoAnswer;
           return `${v.value ? 'Sí' : 'No'}${v.context ? ` — ${v.context}` : ''}`;
+        }
+        if (field.type === 'media') {
+          const media = value as MediaAnswer;
+          return [...media.images, ...media.links].join(' | ');
         }
         if (Array.isArray(value)) {
           return value

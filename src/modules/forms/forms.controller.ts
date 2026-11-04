@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,11 +11,16 @@ import {
   Query,
   Req,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import {
   ApiBearerAuth,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiResponse,
@@ -63,6 +69,24 @@ export class FormsController {
     const ip = request.ip || request.headers['x-forwarded-for'];
     const userAgent = request.headers['user-agent'];
     return this.formsService.submit(slug, dto, ip, userAgent);
+  }
+
+  @Post('public/:slug/fields/:fieldId/images')
+  @HttpCode(201)
+  // Por el proxy del front todas las visitas pueden compartir IP: el tope cubre a todas juntas.
+  @Throttle({ medium: { limit: 60, ttl: 60000 } })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 8 * 1024 * 1024, files: 1 } }))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir una imagen a un campo de un formulario público' })
+  async uploadImage(
+    @Param('slug') slug: string,
+    @Param('fieldId') fieldId: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No llegó ninguna imagen');
+    }
+    return this.formsService.uploadPublicImage(slug, fieldId, file);
   }
 
   // ============ Admin endpoints ============

@@ -20,6 +20,7 @@ export const FORM_FIELD_TYPES = [
   'radio',
   'checkbox',
   'yesno',
+  'media',
   'info',
 ] as const;
 
