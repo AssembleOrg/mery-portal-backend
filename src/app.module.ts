@@ -23,6 +23,7 @@ import { FormsModule } from './modules/forms';
 import { SettingsModule } from './modules/settings';
 import { RewardsModule } from './modules/rewards/rewards.module';
 import { PromoModule } from './modules/promo/promo.module';
+import { DomainWatchModule } from './modules/domain-watch/domain-watch.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { MentorshipModule } from './modules/mentorship/mentorship.module';
 import { MentorshipShopModule } from './modules/mentorship-shop/mentorship-shop.module';
@@ -78,6 +79,7 @@ import { SuspiciousActivityGuard } from './shared/guards';
     SettingsModule,
     RewardsModule,
     PromoModule,
+    DomainWatchModule,
     CheckoutModule,
     MentorshipModule,
     MentorshipShopModule,
